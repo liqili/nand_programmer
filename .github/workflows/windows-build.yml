@@ -54,3 +54,14 @@ jobs:
           cd firmware
           & "$HOME/make/make.exe" CC=$ARM_PATH/arm-none-eabi-gcc
 
+      - name: Archive files
+        run: Compress-Archive -Path .\obj\* -DestinationPath firmware-artifact.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-artifact
+          path: firmware-artifact.zip
+          retention-days: 7
+
+
