@@ -4,7 +4,7 @@ name: Windows Cross-Compile Build
 on:
   push:
     branches:
-      - feature/add-parallel-nor-flash-support
+      - feature/add-macos-support
   pull_request:
     branches:
       - master
