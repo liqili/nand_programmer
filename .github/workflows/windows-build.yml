@@ -18,43 +18,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Install MSYS2 manually
-      - name: Install MSYS2
-        run: |
-          # Download and install MSYS2
-          curl -L https://github.com/msys2/msys2-installer/releases/download/2022-08-01/msys2-x86_64-2022-08-01.exe -o msys2-installer.exe
-          # Run the installer with default settings
-          start /wait msys2-installer.exe /S /D=$HOME/msys2
-
-      # Step 3: Install necessary packages using MSYS2's pacman
-      - name: Install build tools with MSYS2
-        run: |
-          # Install MSYS2 base-devel and mingw-w64-x86_64 toolchain
-          $HOME/msys2/usr/bin/pacman -Syu --noconfirm
-          $HOME/msys2/usr/bin/pacman -S --noconfirm base-devel mingw-w64-x86_64-toolchain
-
-      # Step 4: Download ARM GCC 5.3-2016q1 Installer
+      # Step 2: Download ARM GCC 5.3-2016-q1 Installer
       - name: Download ARM GCC 5.3-2016-q1 Installer
         run: |
-          # Download the ARM GCC 5.3-2016-q1 installer
-          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_3-2016q1/gcc-arm-none-eabi-5_3-2016q1-20160330-win32.exe -o $HOME/gcc-arm-none-eabi-5_3-2016q1.exe
+          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_3-20160330/gcc-arm-none-eabi-5_3-20160330-win32.exe -o $HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe
 
-      # Step 5: Install ARM GCC 5.3-2016-q1 Toolchain
+      # Step 3: Install ARM GCC 5.3-2016-q1 Toolchain
       - name: Install ARM GCC 5.3-2016-q1
         run: |
-          # Run the installer
-          $HOME/gcc-arm-none-eabi-5_3-2016q1.exe /S /D=$HOME/arm-toolchain
+          # Run the installer with silent installation
+          $HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe /S /D=$HOME/arm-toolchain
 
-      # Step 6: Set up the toolchain environment
+      # Step 4: Set up the environment for cross-compilation
       - name: Set up environment for cross-compilation
         run: |
-          # Set the PATH to the ARM toolchain bin directory
+          # Add ARM GCC to the PATH
           echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $GITHUB_ENV
           echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $GITHUB_ENV
 
-      # Step 7: Run cross-compilation with Make
-      - name: Run cross-compilation with Make
+      # Step 5: Install Make via Chocolatey
+      - name: Install Make (via Chocolatey)
         run: |
-          # Use the ARM GCC cross-compiler for make
+          # Install Make using Chocolatey (Windows package manager)
+          choco install make -y
+
+      # Step 6: Change to the firmware directory and run the build using Make
+      - name: Run cross-compilation with Make in firmware directory
+        run: |
+          # Change to the firmware directory and run make
           cd firmware
           make CC=$ARM_PATH/arm-none-eabi-gcc
