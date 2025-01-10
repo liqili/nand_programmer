@@ -56,9 +56,6 @@ $(PROG).elf: $(OBJS)
 $(OBJ_DIR)%.o: %.c
 	$(CC) -c $(CFLAGS) $(INCLUDES) $< -o $@
 
-$(OBJ_DIR)%.o: %.s
-	$(CC) -c $(CFLAGS) $(INCLUDES) $< -o $@
-
 -include $(DEPS)
 
 clean:
