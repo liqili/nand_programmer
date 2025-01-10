@@ -48,4 +48,4 @@ jobs:
         run: |
           # Change to the firmware directory and run make
           cd firmware
-          make CC=$ARM_PATH/arm-none-eabi-gcc
+          make.exe CC=$ARM_PATH/arm-none-eabi-gcc
