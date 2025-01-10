@@ -35,14 +35,11 @@ jobs:
         run: |
           # Add ARM GCC to the PATH
           echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $GITHUB_ENV
-          echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $GITHUB_ENV
-
-      # Step 5: Install Make via Chocolatey
-      - name: Install Make (via Chocolatey)
-        run: |
-          # Install Make using Chocolatey (Windows package manager)
-          choco install make -y
-
+          echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $
+      
+      - name: Install Make 
+        run: winget install -e --id GnuWin32.Make
+      
       # Step 6: Change to the firmware directory and run the build using Make
       - name: Run cross-compilation with Make in firmware directory
         run: |
