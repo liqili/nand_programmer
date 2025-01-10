@@ -24,10 +24,11 @@ jobs:
           curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_3-20160330/gcc-arm-none-eabi-5_3-20160330-win32.exe -o $HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe
 
       # Step 3: Install ARM GCC 5.3-2016-q1 Toolchain
+       # Step 3: Install ARM GCC 5.3-2016-q1 Toolchain
       - name: Install ARM GCC 5.3-2016-q1
         run: |
-          # Run the installer with silent installation
-          $HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe /S /D=$HOME/arm-toolchain
+          # Using Start-Process to execute the installer correctly with arguments
+          Start-Process -Wait -FilePath "$HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe" -ArgumentList "/S", "/D=$HOME/arm-toolchain"
 
       # Step 4: Set up the environment for cross-compilation
       - name: Set up environment for cross-compilation
