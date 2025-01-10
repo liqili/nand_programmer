@@ -18,17 +18,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Download ARM GCC 5.3-2016-q1 Installer
-      - name: Download ARM GCC 5.3-2016-q1 Installer
+      # Step 2: Download ARM GCC 6.2-2016q4 ZIP toolchain (Win32)
+      - name: Download ARM GCC 6.2-2016q4 Toolchain (Win32 ZIP)
         run: |
-          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_3-20160330/gcc-arm-none-eabi-5_3-20160330-win32.exe -o $HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe
+          # Download the ARM GCC toolchain (Win32 ZIP version)
+          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2016q4/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip -o $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip
 
-      # Step 3: Install ARM GCC 5.3-2016-q1 Toolchain
-       # Step 3: Install ARM GCC 5.3-2016-q1 Toolchain
-      - name: Install ARM GCC 5.3-2016-q1
+      # Step 3: Extract ARM GCC toolchain (Win32) from ZIP
+      - name: Extract ARM GCC Toolchain (Win32)
         run: |
-          # Using Start-Process to execute the installer correctly with arguments
-          Start-Process -Wait -FilePath "$HOME/gcc-arm-none-eabi-5_3-20160330-win32.exe" -ArgumentList "/S", "/D=$HOME/arm-toolchain"
+          # Extract the downloaded ZIP file to the $HOME/arm-toolchain directory
+          Expand-Archive -Path "$HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip" -DestinationPath "$HOME/arm-toolchain" -Force
 
       # Step 4: Set up the environment for cross-compilation
       - name: Set up environment for cross-compilation
