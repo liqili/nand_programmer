@@ -52,7 +52,7 @@ jobs:
         run: |
           # Change to the firmware directory and run make
           cd firmware
-          & "$HOME/make/make.exe" CC=$ARM_PATH/arm-none-eabi-gcc
+          "$HOME/make/make.exe" CC=$ARM_PATH/arm-none-eabi-gcc
 
       - name: Archive files
         run: Compress-Archive -Path .\obj\* -DestinationPath firmware-artifact.zip
