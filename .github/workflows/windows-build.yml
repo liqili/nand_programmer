@@ -18,17 +18,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up MSYS2 (for make and other utilities)
-      - name: Set up MSYS2
-        uses: msys2/setup-msys2-action@v2
-        with:
-          update: true  # Optionally update MSYS2
-
-      # Step 3: Install build tools (Make, GCC, etc.)
-      - name: Install build tools
+      # Step 2: Install MSYS2 manually
+      - name: Install MSYS2
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel mingw-w64-x86_64-toolchain
+          # Download and install MSYS2
+          curl -L https://github.com/msys2/msys2-installer/releases/download/2022-08-01/msys2-x86_64-2022-08-01.exe -o msys2-installer.exe
+          start /wait msys2-installer.exe --no-admin --root $HOME/msys2
+
+      # Step 3: Install necessary packages using MSYS2's pacman
+      - name: Install build tools with MSYS2
+        run: |
+          # Install MSYS2 base-devel and mingw-w64-x86_64 toolchain
+          $HOME/msys2/usr/bin/pacman -Syu --noconfirm
+          $HOME/msys2/usr/bin/pacman -S --noconfirm base-devel mingw-w64-x86_64-toolchain
 
       # Step 4: Download ARM GCC 5.3-2016q1 Installer
       - name: Download ARM GCC 5.3-2016-q1 Installer
