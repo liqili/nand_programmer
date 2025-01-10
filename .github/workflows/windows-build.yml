@@ -1,0 +1,57 @@
+name: Windows Cross-Compile Build
+
+# Trigger on push or pull request to the main branch
+on:
+  push:
+    branches:
+      - feature/add-parallel-nor-flash-support
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest  # GitHub-hosted Windows runner
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up MSYS2 (for make and other utilities)
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2-action@v2
+        with:
+          update: true  # Optionally update MSYS2
+
+      # Step 3: Install build tools (Make, GCC, etc.)
+      - name: Install build tools
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel mingw-w64-x86_64-toolchain
+
+      # Step 4: Download ARM GCC 5.3-2016q1 Installer
+      - name: Download ARM GCC 5.3-2016-q1 Installer
+        run: |
+          # Download the ARM GCC 5.3-2016-q1 installer
+          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_3-2016q1/gcc-arm-none-eabi-5_3-2016q1-20160330-win32.exe -o $HOME/gcc-arm-none-eabi-5_3-2016q1.exe
+
+      # Step 5: Install ARM GCC 5.3-2016-q1 Toolchain
+      - name: Install ARM GCC 5.3-2016-q1
+        run: |
+          # Run the installer
+          $HOME/gcc-arm-none-eabi-5_3-2016q1.exe /S /D=$HOME/arm-toolchain
+
+      # Step 6: Set up the toolchain environment
+      - name: Set up environment for cross-compilation
+        run: |
+          # Set the PATH to the ARM toolchain bin directory
+          echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $GITHUB_ENV
+          echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $GITHUB_ENV
+
+      # Step 7: Run cross-compilation with Make
+      - name: Run cross-compilation with Make
+        run: |
+          # Use the ARM GCC cross-compiler for make
+          cd firmware
+          make CC=$ARM_PATH/arm-none-eabi-gcc
