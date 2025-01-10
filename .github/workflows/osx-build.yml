@@ -1,0 +1,104 @@
+name: OSX Cross-Compile Build
+
+on:
+  push:
+    branches:
+      - feature/add-macos-support
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    strategy:
+        matrix:
+          version: [13]
+    runs-on: macOS-${{ matrix.version }}
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          OS_NAME=$([[ ${{ matrix.version }} -eq 13 ]] && echo "Ventura" || echo "Sonoma")
+          MACPORTS_PKG_NAME=MacPorts-2.10.1-${{ matrix.version }}-${OS_NAME}.pkg
+          MACPORTS_URL=https://github.com/macports/macports-base/releases/download/v2.10.1/${MACPORTS_PKG_NAME}
+          wget ${MACPORTS_URL}
+          sudo installer -pkg ./${MACPORTS_PKG_NAME} -target /
+          sudo /opt/local/bin/port install qt5 boost
+          brew install create-dmg
+          echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
+          echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
+          echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
+          echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
+          echo "QT_DIR=$(pwd)/qt" >> $GITHUB_ENV
+
+
+
+      # Step 2: Install ARM GCC toolchain (Linux version)
+      - name: Install ARM GCC 6.2-2016q4 Toolchain
+        run: |
+          # Download the ARM GCC toolchain (Linux version)
+          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2016q4/gcc-arm-none-eabi-6_2-2016q4-20161216-mac.tar.bz2 -o $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-mac.tar.bz2
+
+          # Extract the downloaded file
+          tar -xjf $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-mac.tar.bz2 -C $HOME
+
+          # Add ARM GCC to the PATH
+          echo "$HOME/gcc-arm-none-eabi-6_2-2016q4/bin" >> $GITHUB_PATH
+
+      # Step 3: Verify Make installation
+      - name: Verify Make Installation
+        run: |
+          make --version
+
+      # Step 4: Run cross-compilation with Make in the firmware directory
+      - name: Run cross-compilation with Make in firmware directory
+        run: |
+          # Change to the firmware directory and run make
+          cd firmware
+          make
+
+      # Step 5: Archive files
+      - name: Archive files
+        run: |
+          tar -czf firmware-artifact.tar.gz firmware/obj/*
+
+      # Step 6: Upload artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-artifact
+          path: firmware-artifact.tar.gz
+          retention-days: 7
+
+      - name: Set up build directory
+        run: |
+          cd $QT_DIR
+          mkdir build
+
+      # Step 4: Configure CMake for the project
+      - name: Configure CMake
+        run: |
+          cd $QT_DIR/build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH \
+            -DBOOST_ROOT=$BOOST_ROOT \
+            -DBOOST_INCLUDEDIR=$BOOST_INCLUDEDIR \
+            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR
+
+      # Step 5: Build the project using CMake
+      - name: Build project with CMake
+        run: |
+          cd $QT_DIR/build
+          cmake --build .
+      # Step 12: Upload nand_programmer.dmg as artifact
+      - name: Upload nand_programmer.dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: nand_programmer
+          path: qt/build/nand_programmer.dmg
+          retention-days: 7
