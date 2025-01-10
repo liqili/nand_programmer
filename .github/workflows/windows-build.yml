@@ -23,7 +23,8 @@ jobs:
         run: |
           # Download and install MSYS2
           curl -L https://github.com/msys2/msys2-installer/releases/download/2022-08-01/msys2-x86_64-2022-08-01.exe -o msys2-installer.exe
-          start /wait msys2-installer.exe --no-admin --root $HOME/msys2
+          # Run the installer with default settings
+          start /wait msys2-installer.exe /S /D=$HOME/msys2
 
       # Step 3: Install necessary packages using MSYS2's pacman
       - name: Install build tools with MSYS2
