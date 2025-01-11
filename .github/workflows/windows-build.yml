@@ -63,7 +63,7 @@ jobs:
         run: |
           # Change to the firmware directory and run make
           cd firmware
-          $HOME/ProgramFiles/GnuWin32/bin/make.exe
+          "$HOME\ProgramFiles\GnuWin32\bin\make.exe"
 
       - name: Archive files
         run: Compress-Archive -Path .\obj\* -DestinationPath firmware-artifact.zip
