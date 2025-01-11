@@ -48,7 +48,7 @@ jobs:
           Expand-Archive make-3.81-dep.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
 
           # Add GnuWin32 to the PATH
-          echo "PATH=$HOME/ProgramFiles/GnuWin32:$PATH" >> $GITHUB_ENV
+          echo "PATH=$HOME/ProgramFiles/GnuWin32/bin:$PATH" >> $GITHUB_ENV
 
           # Confirm the installation
           echo "Make 3.81 installed"
@@ -63,7 +63,7 @@ jobs:
         run: |
           # Change to the firmware directory and run make
           cd firmware
-          make
+          $HOME/ProgramFiles/GnuWin32/bin/make.exe
 
       - name: Archive files
         run: Compress-Archive -Path .\obj\* -DestinationPath firmware-artifact.zip
