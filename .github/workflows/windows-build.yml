@@ -40,15 +40,15 @@ jobs:
       - name: Install GnuWin32 Make 3.81
         run: |
           # Download the GnuWin32 Make 3.81 binary and dependencies
-          Invoke-WebRequest -Uri https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -OutFile make-bin.zip
-          Invoke-WebRequest -Uri https://phoenixnap.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -OutFile make-dep.zip
+          curl -L https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -o make-3.81-bin.zip
+          curl -L https://phoenixnap.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -o make-3.81-dep.zip
 
           # Unzip the files to the Program Files directory
-          Expand-Archive make-bin.zip -DestinationPath $env:ProgramFiles\GnuWin32
-          Expand-Archive make-dep.zip -DestinationPath $env:ProgramFiles\GnuWin32
+          Expand-Archive make-3.81-bin.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
+          Expand-Archive make-3.81-dep.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
 
           # Add GnuWin32 to the PATH
-          $env:Path += ";$env:ProgramFiles\GnuWin32\bin"
+          echo "PATH=$HOME/ProgramFiles/GnuWin32:$PATH" >> $GITHUB_ENV
 
           # Confirm the installation
           echo "Make 3.81 installed"
