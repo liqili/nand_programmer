@@ -36,18 +36,26 @@ jobs:
           # Add ARM GCC to the PATH
           echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $GITHUB_ENV
           echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $
-      
-      # - name: Download and Install GNU Make (Native for Windows)
-      #   run: |
-      #     # Download GNU Make for Windows (from GnuWin32)
-      #     curl -L https://downloads.sourceforge.net/gnuwin32/make-3.81.exe -o $HOME/make.exe
-      #     # Create a directory for make and move it there
-      #     mkdir $HOME/make
-      #     move $HOME/make.exe $HOME/make/make.exe
-      #     # Add the directory with make.exe to the PATH
-      #     echo "$HOME/make" >> $GITHUB_ENV
-      - name: Verify Make installation
+
+      - name: Install GnuWin32 Make 3.81
+          run: |
+            # Download the GnuWin32 Make 3.81 binary and dependencies
+            Invoke-WebRequest -Uri https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -OutFile make-bin.zip
+            Invoke-WebRequest -Uri https://phoenixnap.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -OutFile make-dep.zip
+
+            # Unzip the files to the Program Files directory
+            Expand-Archive make-bin.zip -DestinationPath $env:ProgramFiles\GnuWin32
+            Expand-Archive make-dep.zip -DestinationPath $env:ProgramFiles\GnuWin32
+
+            # Add GnuWin32 to the PATH
+            $env:Path += ";$env:ProgramFiles\GnuWin32\bin"
+
+            # Confirm the installation
+            echo "Make 3.81 installed"
+
+      - name: Verify Make Installation
         run: |
+          # Check if make is available in the PATH and print its version
           make --version
 
       # Step 6: Change to the firmware directory and run the build using Make
