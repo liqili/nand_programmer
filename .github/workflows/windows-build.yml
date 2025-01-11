@@ -46,23 +46,6 @@ jobs:
       #     move $HOME/make.exe $HOME/make/make.exe
       #     # Add the directory with make.exe to the PATH
       #     echo "$HOME/make" >> $GITHUB_ENV
-      - name: Install winget manually
-        run: |
-          # Download the Winget package
-          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile winget.msixbundle
-          # Install Winget
-          Add-AppxPackage winget.msixbundle
-          # Remove the installer after installation
-          del winget.msixbundle
-      - name: Check winget
-        run: |
-          # Ensure winget is available (it should be pre-installed on Windows runners)
-          winget --version
-
-      - name: Install Make using winget
-        run: |
-          winget install -e --id GnuWin32.Make
-
       - name: Verify Make installation
         run: |
           make --version
