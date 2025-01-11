@@ -34,7 +34,7 @@ jobs:
       - name: Set up environment for cross-compilation
         run: |
           # Add ARM GCC to the PATH
-          echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $GITHUB_ENV
+          echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $env:GITHUB_ENV
           echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $
 
       - name: Install GnuWin32 Make 3.81
@@ -48,10 +48,12 @@ jobs:
           Expand-Archive make-3.81-dep.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
 
           # Add GnuWin32 to the PATH
-          echo "PATH=$HOME/ProgramFiles/GnuWin32/bin:$PATH" >> $GITHUB_ENV
+          echo "PATH=$HOME/ProgramFiles/GnuWin32/bin:$PATH" >> $env:GITHUB_ENV
 
           # Confirm the installation
           echo "Make 3.81 installed"
+
+          echo $env:GITHUB_ENV
 
       - name: Verify Make Installation
         run: |
