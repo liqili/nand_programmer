@@ -95,11 +95,11 @@ jobs:
         run: |
           cd $QT_DIR/build
           cmake --build .
-          tar -czf nand_programmer.tar.gz nand_programmer.img
+          tar -czf nand_programmer-osx.tar.gz nand_programmer.dmg
       # Step 12: Upload nand_programmer.dmg as artifact
       - name: Upload nand_programmer.dmg
         uses: actions/upload-artifact@v4
         with:
-          name: nand_programmer
-          path: $QT_DIR/build/nand_programmer.tar.gz
+          name: nand_programmer-osx
+          path: $QT_DIR/build/nand_programmer-osx.tar.gz
           retention-days: 7
