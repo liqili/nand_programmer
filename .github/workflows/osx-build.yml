@@ -3,7 +3,7 @@ name: OSX Cross-Compile Build
 on:
   push:
     branches:
-      - master
+      - feature/add-macos-support
   pull_request:
     branches:
       - master
