@@ -100,12 +100,12 @@ jobs:
           /opt/local/libexec/qt5/bin/macdeployqt nand_programmer.app
 
           # Create the DMG file
-          create-dmg --volname "Nand Programmer" build/nand_programmer.dmg build/nand_programmer.app
+          create-dmg --volname "Nand Programmer" nand_programmer.dmg nand_programmer.app
 
       # Step 12: Upload nand_programmer.dmg as artifact
       - name: Upload nand_programmer.dmg
         uses: actions/upload-artifact@v4
         with:
           name: nand_programmer-dmg
-          path: build/nand_programmer.dmg
+          path: $HOME/qt/build/nand_programmer.dmg
           retention-days: 7
