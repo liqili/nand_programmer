@@ -70,3 +70,42 @@ jobs:
           name: firmware-artifact
           path: firmware-artifact.tar.gz
           retention-days: 7
+
+      - name: Set up build directory
+        run: |
+          cd $HOME/qt
+          mkdir build
+
+      # Step 4: Configure CMake for the project
+      - name: Configure CMake
+        run: |
+          cd $HOME/qt/build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH \
+            -DBOOST_ROOT=$BOOST_ROOT \
+            -DBOOST_INCLUDEDIR=$BOOST_INCLUDEDIR \
+            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR
+
+      # Step 5: Build the project using CMake
+      - name: Build project with CMake
+        run: |
+          cd $HOME/qt/build
+          cmake --build .
+
+      - name: Create macOS DMG file
+        run: |
+          cd $HOME/qt/build
+          # Ensure that macdeployqt is available
+          /opt/local/libexec/qt5/bin/macdeployqt nand_programmer.app
+
+          # Create the DMG file
+          create-dmg --volname "Nand Programmer" build/nand_programmer.dmg build/nand_programmer.app
+
+      # Step 12: Upload nand_programmer.dmg as artifact
+      - name: Upload nand_programmer.dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: nand_programmer-dmg
+          path: build/nand_programmer.dmg
+          retention-days: 7
