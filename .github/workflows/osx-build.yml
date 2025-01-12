@@ -28,7 +28,6 @@ jobs:
           wget ${MACPORTS_URL}
           sudo installer -pkg ./${MACPORTS_PKG_NAME} -target /
           sudo /opt/local/bin/port install qt5 boost
-          brew install create-dmg
           echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
@@ -95,17 +94,7 @@ jobs:
         run: |
           cd $QT_DIR/build
           cmake --build .
-          cp $QT_DIR/nando_parallel_chip_db.csv $QT_DIR/nando_spi_chip_db.csv $QT_DIR/img/app_icon.icns nand_programmer.app/Contents/Resources/
-
-      - name: Create macOS DMG file
-        run: |
-          cd $QT_DIR/build
-          # Ensure that macdeployqt is available
-          /opt/local/libexec/qt5/bin/macdeployqt nand_programmer.app
-
-          # Create the DMG file
-          create-dmg --volname "Nand Programmer" nand_programmer.dmg nand_programmer.app
-
+          cp $QT_DIR/nando_parallel_chip_db.csv $QT_DIR/nando_spi_chip_db.csv $QT_DIR/img/app_icon.icns nand_programmer.app/Contents/
       # Step 12: Upload nand_programmer.dmg as artifact
       - name: Upload nand_programmer.dmg
         uses: actions/upload-artifact@v4
