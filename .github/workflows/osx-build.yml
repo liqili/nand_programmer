@@ -100,6 +100,6 @@ jobs:
       - name: Upload nand_programmer.dmg
         uses: actions/upload-artifact@v4
         with:
-          name: nand_programmer-dmg
+          name: nand_programmer
           path: $QT_DIR/build/nand_programmer.dmg
           retention-days: 7
