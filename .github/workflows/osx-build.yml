@@ -32,7 +32,7 @@ jobs:
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
           echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
-          echo "QT_DIR=$HOME/nand_programmer/qt" >> $GITHUB_ENV
+          echo "QT_DIR=$(pwd)/qt" >> $GITHUB_ENV
 
 
 
