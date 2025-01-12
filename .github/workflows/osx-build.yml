@@ -28,6 +28,7 @@ jobs:
           wget ${MACPORTS_URL}
           sudo installer -pkg ./${MACPORTS_PKG_NAME} -target /
           sudo /opt/local/bin/port install qt5 boost
+          brew install create-dmg
           echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
