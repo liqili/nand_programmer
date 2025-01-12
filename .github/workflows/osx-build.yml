@@ -92,6 +92,7 @@ jobs:
         run: |
           cd $HOME/qt/build
           cmake --build .
+          cp $HOME/qt/nando_parallel_chip_db.csv $HOME/qt/nando_spi_chip_db.csv $HOME/qt/img/app_icon.icns nand_programmer.app/Contents/Resources/
 
       - name: Create macOS DMG file
         run: |
