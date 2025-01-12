@@ -13,10 +13,6 @@ jobs:
     strategy:
       matrix:
         version: [13]
-        build-tool: [ autotools, cmake ]
-        compiler: [ {cpp: clang++, c: clang} ]
-      fail-fast: false
-
     runs-on: macOS-${{ matrix.version }}
 
     steps:
