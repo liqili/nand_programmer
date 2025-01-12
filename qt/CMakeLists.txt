@@ -47,7 +47,6 @@ target_link_libraries(nand_programmer Qt5::Widgets Qt5::SerialPort Boost::system
 
 
 if (APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS deployment version" FORCE)
     set_target_properties(nand_programmer PROPERTIES
             MACOSX_BUNDLE_ICON_FILE app_icon.icns  # Optional: Set app icon (replace with your .icns file)
             MACOSX_BUNDLE_GUI_IDENTIFIER com.example.nandprogrammer
