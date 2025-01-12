@@ -4,7 +4,7 @@ name: Windows Cross-Compile Build
 on:
   push:
     branches:
-      - feature/add-macos-support
+      - master
   pull_request:
     branches:
       - master
@@ -12,48 +12,46 @@ on:
 jobs:
   build:
     runs-on: windows-latest  # GitHub-hosted Windows runner
-
+    defaults:
+      run:
+        shell: pwsh  # Set PowerShell (pwsh) globally for all steps
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Download ARM GCC 6.2-2016q4 ZIP toolchain (Win32)
-      - name: Download ARM GCC 6.2-2016q4 Toolchain (Win32 ZIP)
+      # Step 2: Install ARM GCC 6.2-2016q4 ZIP toolchain (Win32)
+      - name: Install ARM GCC 6.2-2016q4 Toolchain (Win32 ZIP)
         run: |
           # Download the ARM GCC toolchain (Win32 ZIP version)
           curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2016q4/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip -o $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip
 
-      # Step 3: Extract ARM GCC toolchain (Win32) from ZIP
-      - name: Extract ARM GCC Toolchain (Win32)
-        run: |
           # Extract the downloaded ZIP file to the $HOME/arm-toolchain directory
           Expand-Archive -Path "$HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-win32-zip.zip" -DestinationPath "$HOME/arm-toolchain" -Force
 
-      # Step 4: Set up the environment for cross-compilation
-      - name: Set up environment for cross-compilation
-        run: |
           # Add ARM GCC to the PATH
-          echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $env:GITHUB_ENV
-          echo "ARM_PATH=$HOME/arm-toolchain/bin" >> $
+          # echo "PATH=$HOME/arm-toolchain/bin:$PATH" >> $env:GITHUB_ENV
+          Add-Content $env:GITHUB_PATH $HOME/arm-toolchain/bin
 
-      - name: Install GnuWin32 Make 3.81
-        run: |
-          # Download the GnuWin32 Make 3.81 binary and dependencies
-          curl -L https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -o make-3.81-bin.zip
-          curl -L https://phoenixnap.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -o make-3.81-dep.zip
+      # - name: Install GnuWin32 Make 3.81
+      #   run: |
+      #     # Download the GnuWin32 Make 3.81 binary and dependencies
+      #     # Invoke-WebRequest -Uri https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -OutFile $HOME/make-3.81-bin.zip
+      #     # Invoke-WebRequest -Uri https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -OutFile $HOME/make-3.81-dep.zip
 
-          # Unzip the files to the Program Files directory
-          Expand-Archive make-3.81-bin.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
-          Expand-Archive make-3.81-dep.zip -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
+      #     curl -L https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-bin.zip -o $HOME/make-3.81-bin.zip
+      #     curl -L https://cfhcable.dl.sourceforge.net/project/gnuwin32/make/3.81/make-3.81-dep.zip -o $HOME/make-3.81-dep.zip
 
-          # Add GnuWin32 to the PATH
-          echo "PATH=$HOME/ProgramFiles/GnuWin32/bin:$PATH" >> $env:GITHUB_ENV
+      #     # Unzip the files to the Program Files directory
+      #     Expand-Archive -Path "$HOME/make-3.81-bin.zip" -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
+      #     Expand-Archive -Path "$HOME/make-3.81-dep.zip" -DestinationPath $HOME/ProgramFiles/GnuWin32 -Force
 
-          # Confirm the installation
-          echo "Make 3.81 installed"
+      #     # Add GnuWin32 to the PATH
+      #     # echo "PATH=$HOME/ProgramFiles/GnuWin32/bin:$PATH" >> $env:GITHUB_ENV
+      #     Add-Content $env:GITHUB_PATH $HOME/ProgramFiles/GnuWin32/bin
 
-          echo $env:GITHUB_ENV
+      #     # Confirm the installation
+      #     echo "Make 3.81 installed"
 
       - name: Verify Make Installation
         run: |
@@ -65,10 +63,11 @@ jobs:
         run: |
           # Change to the firmware directory and run make
           cd firmware
-          "$HOME\ProgramFiles\GnuWin32\bin\make.exe"
+          make SHELL="C:\windows\system32\cmd.exe"
 
       - name: Archive files
-        run: Compress-Archive -Path .\obj\* -DestinationPath firmware-artifact.zip
+        run: |
+          Compress-Archive -Path "firmware/obj/*" -DestinationPath firmware-artifact.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
