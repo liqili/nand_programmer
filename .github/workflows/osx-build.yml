@@ -32,6 +32,8 @@ jobs:
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
           echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
+          echo "QT_DIR=$HOME/nand_programmer/qt" >> $GITHUB_ENV
+
 
 
       # Step 2: Install ARM GCC toolchain (Linux version)
@@ -73,13 +75,13 @@ jobs:
 
       - name: Set up build directory
         run: |
-          cd $HOME/qt
+          cd $QT_DIR
           mkdir build
 
       # Step 4: Configure CMake for the project
       - name: Configure CMake
         run: |
-          cd $HOME/qt/build
+          cd $QT_DIR/build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH \
@@ -90,13 +92,13 @@ jobs:
       # Step 5: Build the project using CMake
       - name: Build project with CMake
         run: |
-          cd $HOME/qt/build
+          cd $QT_DIR/build
           cmake --build .
-          cp $HOME/qt/nando_parallel_chip_db.csv $HOME/qt/nando_spi_chip_db.csv $HOME/qt/img/app_icon.icns nand_programmer.app/Contents/Resources/
+          cp $QT_DIR/nando_parallel_chip_db.csv $QT_DIR/nando_spi_chip_db.csv $QT_DIR/img/app_icon.icns nand_programmer.app/Contents/Resources/
 
       - name: Create macOS DMG file
         run: |
-          cd $HOME/qt/build
+          cd $QT_DIR/build
           # Ensure that macdeployqt is available
           /opt/local/libexec/qt5/bin/macdeployqt nand_programmer.app
 
@@ -108,5 +110,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nand_programmer-dmg
-          path: $HOME/qt/build/nand_programmer.dmg
+          path: $QT_DIR/build/nand_programmer.dmg
           retention-days: 7
