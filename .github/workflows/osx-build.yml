@@ -95,11 +95,10 @@ jobs:
         run: |
           cd $QT_DIR/build
           cmake --build .
-          ls -alt
       # Step 12: Upload nand_programmer.dmg as artifact
       - name: Upload nand_programmer.dmg
         uses: actions/upload-artifact@v4
         with:
           name: nand_programmer
-          path: $QT_DIR/build/nand_programmer.dmg
+          path: qt/build/nand_programmer.dmg
           retention-days: 7
