@@ -61,17 +61,12 @@ jobs:
           cd firmware
           make
 
-      # Step 5: Archive files
-      - name: Archive files
-        run: |
-          tar -czf firmware-artifact.tar.gz firmware/obj/*
-
       # Step 6: Upload artifact
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-artifact
-          path: firmware-artifact.tar.gz
+          name: firmware
+          path: firmware/obj/*
           retention-days: 7
 
       - name: Set up build directory
