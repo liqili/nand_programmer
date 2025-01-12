@@ -1,0 +1,49 @@
+name: Linux Cross-Compile Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04	  # GitHub-hosted Linux runner (Ubuntu)
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Install ARM GCC toolchain (Linux version)
+      - name: Install ARM GCC 6.2-2016q4 Toolchain
+        run: |
+          # Download the ARM GCC toolchain (Linux version)
+          curl -L https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2016q4/gcc-arm-none-eabi-6_2-2016q4-20161216-linux.tar.bz2 -o $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-linux.tar.bz2
+
+          # Extract the downloaded file
+          tar -xjf $HOME/gcc-arm-none-eabi-6_2-2016q4-20161216-linux.tar.bz2 -C $HOME
+
+          # Add ARM GCC to the PATH
+          echo "$HOME/gcc-arm-none-eabi-6_2-2016q4/bin" >> $GITHUB_PATH
+
+      # Step 3: Verify Make installation
+      - name: Verify Make Installation
+        run: |
+          make --version
+
+      # Step 4: Run cross-compilation with Make in the firmware directory
+      - name: Run cross-compilation with Make in firmware directory
+        run: |
+          # Change to the firmware directory and run make
+          cd firmware
+          make
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: firmware/obj/*
+          retention-days: 7

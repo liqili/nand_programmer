@@ -6,7 +6,9 @@ set(CMAKE_EXE_LINKER_FLAGS "-nostdlib")
 set(CMAKE_C_FLAGS "-nostdlib")
 set(CMAKE_CXX_FLAGS "-nostdlib")
 # Define the base toolchain path
-set(TOOLCHAIN "../../compiler/gcc-arm-none-eabi-4_9-2015q1/bin")
+if(NOT DEFINED TOOLCHAIN)
+    set(TOOLCHAIN "${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/gcc-arm-none-eabi-4_9-2015q1/bin")
+endif()
 
 # Set the compilers and tools using the TOOLCHAIN variable
 set(CMAKE_C_COMPILER "${TOOLCHAIN}/arm-none-eabi-gcc")

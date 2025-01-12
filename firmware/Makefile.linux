@@ -19,8 +19,11 @@ APP2_PATH=$(APP_OBJ_DIR)$(APP2_NAME)
 
 OBJ_DIR=obj/
 
-COMPILER_BASE = $(shell realpath ../../compiler)
+COMPILER_BASE = $(shell pwd)/../../compiler
 TOOLCHAIN=$(COMPILER_BASE)/gcc-arm-none-eabi-4_9-2015q1/bin/arm-none-eabi-
+ifeq "$(wildcard $(COMPILER_BASE))" ""
+    TOOLCHAIN := arm-none-eabi-
+endif
 CC=$(TOOLCHAIN)gcc
 OBJCOPY=$(TOOLCHAIN)objcopy
 OBJDUMP=$(TOOLCHAIN)objdump
