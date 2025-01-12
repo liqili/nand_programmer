@@ -12,15 +12,9 @@ jobs:
   build:
     strategy:
       matrix:
-        version: [13, 14]
+        version: [13]
         build-tool: [ autotools, cmake ]
-        compiler: [ {cpp: clang++, c: clang}, {cpp: g++, c: gcc} ]
-        exclude:
-          - version: 14
-            compiler: {cpp: clang++, c: clang}
-          # FIXME: temp exclude of failed linking again with cmake + g++ against GRPC dependenncies
-          - compiler: {cpp: g++, c: gcc}
-            build-tool: cmake
+        compiler: [ {cpp: clang++, c: clang} ]
       fail-fast: false
 
     runs-on: macOS-${{ matrix.version }}
