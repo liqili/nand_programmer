@@ -11,14 +11,31 @@ on:
 jobs:
   build:
     strategy:
-      matrix:
-        version: [13]
+        matrix:
+          version: [13]
     runs-on: macOS-${{ matrix.version }}
 
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          brew update --preinstall
+          brew bundle --force --file=contrib/Brewfile
+
+          OS_NAME=$([[ ${{ matrix.version }} -eq 13 ]] && echo "Ventura" || echo "Sonoma")
+          MACPORTS_PKG_NAME=MacPorts-2.10.1-${{ matrix.version }}-${OS_NAME}.pkg
+          MACPORTS_URL=https://github.com/macports/macports-base/releases/download/v2.10.1/${MACPORTS_PKG_NAME}
+          wget ${MACPORTS_URL}
+          sudo installer -pkg ./${MACPORTS_PKG_NAME} -target /
+          sudo /opt/local/bin/port install qt5 boost
+          echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
+          echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
+          echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
+          echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
+
 
       # Step 2: Install ARM GCC toolchain (Linux version)
       - name: Install ARM GCC 6.2-2016q4 Toolchain
