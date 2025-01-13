@@ -14,11 +14,27 @@ jobs:
         matrix:
           version: [13]
     runs-on: macOS-${{ matrix.version }}
+    env: 
+      MACOSX_DEPLOYMENT_TARGET: 10.15
 
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          aqtversion: '==3.1.*'
+          version: '5.15.2'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          dir: '${{github.workspace}}/qt5/'
+          install-deps: 'true'
+
+      - name: List files in Qt
+        run: find ${{env.Qt5_Dir}}
 
       - name: Install dependencies
         run: |
@@ -27,15 +43,17 @@ jobs:
           MACPORTS_URL=https://github.com/macports/macports-base/releases/download/v2.10.1/${MACPORTS_PKG_NAME}
           wget ${MACPORTS_URL}
           sudo installer -pkg ./${MACPORTS_PKG_NAME} -target /
-          sudo /opt/local/bin/port install qt5 boost
+          # sudo sh -c 'sudo echo "buildfromsource always" >> /opt/local/etc/macports/macports.conf'
+          sudo sh -c 'sudo echo "macosx_sdk_version ${MACOSX_DEPLOYMENT_TARGET}" >> /opt/local/etc/macports/macports.conf'
+          sudo sh -c 'sudo echo "macosx_deployment_target ${MACOSX_DEPLOYMENT_TARGET}" >> /opt/local/etc/macports/macports.conf'
+          sudo /opt/local/bin/port install boost
           brew install create-dmg
-          echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
+          echo 'CMAKE_PREFIX_PATH="${{env.Qt5_Dir}}/lib/cmake/"' >> $GITHUB_ENV
+          # echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
           echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
           echo "QT_DIR=$(pwd)/qt" >> $GITHUB_ENV
-
-
 
       # Step 2: Install ARM GCC toolchain (Linux version)
       - name: Install ARM GCC 6.2-2016q4 Toolchain
@@ -83,7 +101,9 @@ jobs:
             -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH \
             -DBOOST_ROOT=$BOOST_ROOT \
             -DBOOST_INCLUDEDIR=$BOOST_INCLUDEDIR \
-            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR
+            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR \
+            -DQt5_DIR=${{env.Qt5_Dir}}/lib/cmake/Qt5/ \
+            -DMACDEPLOYQT_PATH=${{env.Qt5_Dir}}/bin/macdeployqt
 
       # Step 5: Build the project using CMake
       - name: Build project with CMake
