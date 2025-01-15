@@ -30,6 +30,7 @@ Application:
 - Extendable chip database
 - Chip autodetection
 - Firmware update
+- Windows, MacOS,and Linux host application support
 
 ### Supported chips
 #### Parallel NAND:
