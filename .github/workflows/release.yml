@@ -1,13 +1,9 @@
-name: OSX Cross-Compile Build
+name: Build and Release for OSX
 
 on:
   push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-
+    tags:
+      - '*'
 jobs:
   build:
     strategy:
@@ -79,14 +75,6 @@ jobs:
           cd firmware
           make
 
-      # Step 6: Upload artifact
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware
-          path: firmware/obj/*
-          retention-days: 7
-
       - name: Set up build directory
         run: |
           cd $QT_DIR
@@ -110,10 +98,52 @@ jobs:
         run: |
           cd $QT_DIR/build
           cmake --build .
-      # Step 12: Upload nand_programmer.dmg as artifact
-      - name: Upload nand_programmer.dmg
-        uses: actions/upload-artifact@v4
+
+      # Step: Create GitHub release with a custom release name
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
         with:
-          name: nand_programmer
-          path: qt/build/nand_programmer.dmg
-          retention-days: 7
+          draft: false
+          prerelease: false
+          release_name: "${{ github.ref_name }}"  # Use 'nando' + tag name
+          tag_name: ${{ github.ref }}  # Use the tag pushed
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # # Step 6: Upload artifact
+      # - name: Upload artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: firmware
+      #     path: firmware/obj/*
+      #     retention-days: 7
+
+      # # Step 12: Upload nand_programmer.dmg as artifact
+      # - name: Upload nand_programmer.dmg
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: nand_programmer
+      #     path: qt/build/nand_programmer.dmg
+      #     retention-days: 7
+
+      # Step: Upload the created DMG artifact
+      - name: Upload firmware
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: firmware/obj/nando_fw.bin  
+          asset_name: nando_fw.bin
+          asset_content_type: application/octet-stream
+      - name: Upload nand_programmer.dmg
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: qt/build/nand_programmer.dmg
+          asset_name: nand_programmer-osx.dmg
+          asset_content_type: application/octet-stream

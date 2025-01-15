@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.17)
 project(nand_programmer)
 
 # Set the CMAKE_PREFIX_PATH to find Qt5
-set(CMAKE_PREFIX_PATH "/opt/local/libexec/qt5/lib/cmake/Qt5" ${CMAKE_PREFIX_PATH})
+if(NOT CMAKE_PREFIX_PATH)
+    set(CMAKE_PREFIX_PATH "/opt/local/libexec/qt5/lib/cmake/Qt5" ${CMAKE_PREFIX_PATH})
+endif()
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 14)
@@ -19,9 +21,12 @@ set(CMAKE_AUTOUIC ON)
 include_directories(.)
 
 # Set Boost root directory
+if(NOT BOOST_ROOT)
 set(BOOST_ROOT "/opt/local")
 set(BOOST_INCLUDEDIR "/opt/local/include")
 set(BOOST_LIBRARYDIR "/opt/local/lib")
+endif()
+
 find_package(Boost REQUIRED COMPONENTS system thread)
 
 # If you use Boost headers
@@ -49,11 +54,13 @@ target_link_libraries(nand_programmer Qt5::Widgets Qt5::SerialPort Boost::system
 if (APPLE)
     set_target_properties(nand_programmer PROPERTIES
             MACOSX_BUNDLE_ICON_FILE app_icon.icns  # Optional: Set app icon (replace with your .icns file)
-            MACOSX_BUNDLE_GUI_IDENTIFIER com.example.nandprogrammer
+            MACOSX_BUNDLE_GUI_IDENTIFIER com.nando.nando
             MACOSX_BUNDLE_BUNDLE_VERSION 1.0
             MACOSX_BUNDLE_SHORT_VERSION_STRING 1.0.0
             )
-    set(MACDEPLOYQT_PATH "/opt/local/libexec/qt5/bin/macdeployqt")
+    if(NOT MACDEPLOYQT_PATH)
+        set(MACDEPLOYQT_PATH "/opt/local/libexec/qt5/bin/macdeployqt")
+    endif()
 
     file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_chip_db.csv
             DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
