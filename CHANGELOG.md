@@ -90,3 +90,13 @@ Verify operation.
 NAND timings.
 Synchronization issues.
 Low write speed on Windows.
+
+## [3.5.1] - 2025-01-15
+### Added
+Add MacOS host application
+Add cmake support
+Add workflow CI
+
+### Fixed
+Fix MacOS firmware issue
+Makefile improvements

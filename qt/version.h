@@ -6,6 +6,6 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-#define SW_VERSION "3.5.0"
+#define SW_VERSION "3.5.1"
 
 #endif // VERSION_H
