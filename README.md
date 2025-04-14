@@ -9,7 +9,8 @@ PCB boards:
 
 Application:
 
-<img src="img/host_app.jpeg">
+<img width="595" alt="image" src="https://github.com/user-attachments/assets/05663cc5-72a1-4f18-bc9c-c09771153af1" />
+
 
 ## Features
 - USB interface
