@@ -19,11 +19,22 @@ APP1_PATH=$(APP_OBJ_DIR)\\$(APP1_NAME)
 APP2_PATH=$(APP_OBJ_DIR)\\$(APP2_NAME)
 
 TOOLCHAIN=arm-none-eabi-
+CC=$(TOOLCHAIN)gcc.exe
 OBJCOPY=$(TOOLCHAIN)objcopy.exe
+OBJDUMP=$(TOOLCHAIN)objdump.exe
+SIZE=$(TOOLCHAIN)size.exe
+AR=$(TOOLCHAIN)ar.exe
+
+SPL_FLAGS=-DSTM32F10X_HD -DCONFIG_BOOTLOADER
+CFLAGS=-g -Wall -Werror -O3  # Debugging flags: -g for debug symbols, -O0 for no optimization
+CFLAGS+=-ffunction-sections -fdata-sections
+CFLAGS+=-MMD -MP
+CFLAGS+=-mcpu=cortex-m3 -mthumb
+CFLAGS+=$(SPL_FLAGS)
 
 all:
-	$(MAKE) -C $(BOOT_DIR)
-	$(MAKE) -C $(APP_DIR)
+	$(MAKE) -C $(BOOT_DIR) CC=$(CC) CFLAGS="$(CFLAGS)" OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) SIZE=$(SIZE) AR=$(AR)
+	$(MAKE) -C $(APP_DIR) CC=$(CC) CFLAGS="$(CFLAGS)" OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) SIZE=$(SIZE) AR=$(AR)
 	if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
 	copy $(BOOT_PATH) $(OBJ_DIR)\\
 	copy $(APP1_PATH) $(OBJ_DIR)\\
@@ -46,3 +57,9 @@ distclean:
 	$(MAKE) -C $(BOOT_DIR) distclean
 	$(MAKE) -C $(APP_DIR) distclean
 	if exist $(OBJ_DIR) rd /s /q $(OBJ_DIR)
+
+erase:
+	st-flash erase
+
+program:
+	st-flash write $(OBJ_DIR)\\$(GEN_NAME).bin 0x08000000
