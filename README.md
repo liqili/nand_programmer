@@ -45,8 +45,7 @@ AT45DB021D, MX25L8006E, W25Q16JV and others.
 See full list of supported chips [qt/nando_spi_chip_db.csv](qt/nando_spi_chip_db.csv)
 
 ## Release binaries
-You can download host application deb package for Ubuntu/Windows installer, firmware binary for
-STM32, schematic and gerber files from <a href="https://drive.google.com/drive/folders/1d5hP6MKbkEBGQe_xIRl4-A5LPt_-9QIN">Google Driver</a>.
+You can build the release binaries using Github actions workflow.
 
 
 ### License
