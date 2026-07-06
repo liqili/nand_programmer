@@ -46,6 +46,7 @@ endif ()
 # Copy CSV files into the build directory
 file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
 file(COPY ${CMAKE_SOURCE_DIR}/nando_spi_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
+file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_serial_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
 
 # Link with Qt5 Widgets
 target_link_libraries(nand_programmer Qt5::Widgets Qt5::SerialPort Boost::system Boost::thread)
@@ -66,6 +67,9 @@ if (APPLE)
             DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
 
     file(COPY ${CMAKE_SOURCE_DIR}/nando_spi_chip_db.csv
+            DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
+
+    file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_serial_chip_db.csv
             DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
 
 

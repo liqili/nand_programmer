@@ -15,6 +15,7 @@ protected:
     {
         CHIP_HAL_PARALLEL = 0,
         CHIP_HAL_SPI = 1,
+        CHIP_HAL_PARALLEL_SERIAL = 2,
         CHIP_HAL_LAST
     };
 
