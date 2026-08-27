@@ -1,7 +1,7 @@
 # NANDO (NANDopen) programmer
 
 ## General
-NANDO is open source NAND programmer based on STM32 processor. It supports parallel NAND and SPI flash programming.
+NANDO is open source NAND programmer based on STM32 processor. It supports parallel NAND, SPI flash and parallel serial flash programming.
 
 PCB boards:
 
@@ -31,6 +31,8 @@ Application:
 - Extendable chip database
 - Chip autodetection
 - Firmware update
+- Host-native driver test suite (no hardware required)
+- Full-system firmware simulation with Renode
 - Windows, MacOS,and Linux host application support
 
 ### Supported chips
@@ -43,6 +45,35 @@ See full list of supported chips [qt/nando_parallel_chip_db.csv](qt/nando_parall
 AT45DB021D, MX25L8006E, W25Q16JV and others.
 
 See full list of supported chips [qt/nando_spi_chip_db.csv](qt/nando_spi_chip_db.csv)
+
+#### Parallel serial flash
+Support for flash devices that use a serial-flash style command set over the
+parallel CLE/ALE bus. The driver and host support are in place, but the chip
+database [qt/nando_parallel_serial_chip_db.csv](qt/nando_parallel_serial_chip_db.csv)
+ships empty and this path has not yet been exercised on real hardware.
+
+## Development
+
+### Host tests
+Driver logic is tested natively, with no programmer hardware attached. The
+drivers are compiled for the host and run against behavioural models of the
+flash devices, which enforce the bus protocol and report violations.
+
+```
+cd test && make
+```
+
+### Simulation
+The firmware can be run end to end on an emulated STM32F103 using
+[Renode](https://renode.io/), with a modelled NAND device on the FSMC bus. It
+runs headless in Docker and writes its results to `sim/out/`.
+
+```
+cd sim && docker-compose up
+```
+
+See [CLAUDE.md](CLAUDE.md) for build commands, the HAL contract, the chip
+database format and hardware pinout notes.
 
 ## Release binaries
 You can build the release binaries using Github actions workflow.

@@ -5,7 +5,15 @@
 
 #include "parallel_nor_flash.h"
 #include "log.h"
+
+#ifdef PNOR_HOST_TEST
+/* Host test build: SPL peripheral calls are stubbed out and bus accesses are
+ * routed to the flash chip model instead of the FSMC window.
+ */
+#include "spl_stub.h"
+#else
 #include <stm32f10x.h>
+#endif
 
 #define CMD_AREA                   (uint32_t)(1<<16)  /* A16 = CLE  high */
 #define ADDR_AREA                  (uint32_t)(1<<17)  /* A17 = ALE high */
@@ -18,6 +26,21 @@
 
 #define MAX_ADDR_CYCLES 4
 #define MAX_BUSY_BIT 7
+
+#ifndef PNOR_HOST_TEST
+/* Every bus access in this driver goes through these two primitives. A16 and
+ * A17 of the FSMC window select the command, address or data area.
+ */
+static inline void pnor_bus_write(uint32_t area, uint8_t val)
+{
+    *(__IO uint8_t *)(Bank_NOR_ADDR | area) = val;
+}
+
+static inline uint8_t pnor_bus_read(uint32_t area)
+{
+    return *(__IO uint8_t *)(Bank_NOR_ADDR | area);
+}
+#endif
 
 typedef struct __attribute__((__packed__))
 {
@@ -147,7 +170,7 @@ static void pnor_uninit()
 
 static void pnor_send_cmd(uint8_t cmd)
 {
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = cmd;
+    pnor_bus_write(CMD_AREA, cmd);
 }
 
 /* Address is clocked in most significant byte first, as expected by the serial
@@ -156,12 +179,17 @@ static void pnor_send_cmd(uint8_t cmd)
 static void pnor_send_addr(uint32_t addr, uint8_t cycles)
 {
     while (cycles--)
-        *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = (uint8_t)(addr >> (cycles * 8));
+        pnor_bus_write(ADDR_AREA, (uint8_t)(addr >> (cycles * 8)));
 }
 
 static uint8_t pnor_read_data_byte()
 {
-    return *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
+    return pnor_bus_read(DATA_AREA);
+}
+
+static void pnor_write_data_byte(uint8_t val)
+{
+    pnor_bus_write(DATA_AREA, val);
 }
 
 /* Single shot, non blocking. Called from the main loop while a write is in
@@ -248,7 +276,7 @@ static void pnor_write_page_async(uint8_t *buf, uint32_t page,
     pnor_send_addr(addr, pnor_conf.addr_cycles);
 
     for (i = 0; i < page_size; i++)
-        *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA) = buf[i];
+        pnor_write_data_byte(buf[i]);
 }
 
 static uint32_t pnor_read_data(uint8_t *buf, uint32_t page,

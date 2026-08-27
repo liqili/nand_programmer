@@ -8,3 +8,17 @@ qt/qt.pro.user*
 */.idea
 */cmake-build-debug
 kicad/nand_programmator-backups/
+test/pnor_test
+test/nand_test
+test/*.dSYM/
+sim/out/
+sim/sim_fw.elf
+sim/sim_fw.map
+sim/sim_chip_conf.h
+firmware/programmer/obj/
+.idea/
+firmware/bootloader/obj/
+qt/build/
+qt/cmake-build-debug/
+__pycache__/
+*.pyc
