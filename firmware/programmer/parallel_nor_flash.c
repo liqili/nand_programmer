@@ -12,30 +12,18 @@
 
 #define DATA_AREA                  ((uint32_t)0x00000000)
 
-#define FSMC_Bank_NOR     FSMC_Bank2_NAND
-#define Bank_NOR_ADDR     Bank2_NAND_ADDR
-#define Bank2_NAND_ADDR    ((uint32_t)0x70000000)
-
-#define FLASH_DUMMY_BYTE 0xA5
-
-#define FLASH_READY 0
-#define FLASH_BUSY  1
-#define FLASH_TIMEOUT 2
-
-/* 1st addressing cycle */
-#define ADDR_1st_CYCLE(ADDR) (uint8_t)((ADDR)& 0xFF)
-/* 2nd addressing cycle */
-#define ADDR_2nd_CYCLE(ADDR) (uint8_t)(((ADDR)& 0xFF00) >> 8)
-/* 3rd addressing cycle */
-#define ADDR_3rd_CYCLE(ADDR) (uint8_t)(((ADDR)& 0xFF0000) >> 16)
-/* 4th addressing cycle */
-#define ADDR_4th_CYCLE(ADDR) (uint8_t)(((ADDR)& 0xFF000000) >> 24)
+#define Bank_NOR_ADDR      ((uint32_t)0x70000000)
 
 #define UNDEFINED_CMD 0xFF
+
+#define MAX_ADDR_CYCLES 4
+#define MAX_BUSY_BIT 7
 
 typedef struct __attribute__((__packed__))
 {
     uint8_t page_offset;
+    uint8_t addr_cycles;
+    uint8_t id_addr_cycles;
     uint8_t read_cmd;
     uint8_t read_id_cmd;
     uint8_t write_cmd;
@@ -44,7 +32,6 @@ typedef struct __attribute__((__packed__))
     uint8_t status_cmd;
     uint8_t busy_bit;
     uint8_t busy_state;
-    uint32_t freq;
     uint8_t setup_time;
     uint8_t wait_setup_time;
     uint8_t hold_setup_time;
@@ -62,18 +49,20 @@ static void pnor_gpio_init()
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD | RCC_APB2Periph_GPIOE |
         RCC_APB2Periph_GPIOF | RCC_APB2Periph_GPIOG, ENABLE);
 
-    /* CLE, ALE, D0->D3, NOE, NWE and NCE2 NOR pin configuration */
+    /* CLE, ALE, D0->D3, NOE, NWE and NCE2 pin configuration */
     gpio_init.GPIO_Pin = GPIO_Pin_11 | GPIO_Pin_12 | GPIO_Pin_14 | GPIO_Pin_15 |
         GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_7;
     gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
     gpio_init.GPIO_Mode = GPIO_Mode_AF_PP;
     GPIO_Init(GPIOD, &gpio_init);
 
-    /* D4->D7 NOR pin configuration */
+    /* D4->D7 pin configuration */
     gpio_init.GPIO_Pin = GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9 | GPIO_Pin_10;
     GPIO_Init(GPIOE, &gpio_init);
 
-    /* NWAIT NOR pin configuration */
+    /* NWAIT pin configuration. Kept as pull-up input: parallel NOR devices do
+     * not drive a ready/busy line, progress is polled with the status command.
+     */
     gpio_init.GPIO_Pin = GPIO_Pin_6;
     gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
     gpio_init.GPIO_Mode = GPIO_Mode_IPU;
@@ -93,7 +82,8 @@ static void pnor_fsmc_init()
     timing_init.FSMC_HiZSetupTime = pnor_conf.hi_z_setup_time;
 
     fsmc_init.FSMC_Bank = FSMC_Bank2_NAND;
-    fsmc_init.FSMC_Waitfeature = FSMC_Waitfeature_Enable;
+    /* No ready/busy signal on NWAIT, do not let the controller stall on it */
+    fsmc_init.FSMC_Waitfeature = FSMC_Waitfeature_Disable;
     fsmc_init.FSMC_MemoryDataWidth = FSMC_MemoryDataWidth_8b;
     fsmc_init.FSMC_ECC = FSMC_ECC_Disable;
     fsmc_init.FSMC_ECCPageSize = FSMC_ECCPageSize_2048Bytes;
@@ -108,10 +98,39 @@ static void pnor_fsmc_init()
 
 static int pnor_init(void *conf, uint32_t conf_size)
 {
-    if (conf_size < sizeof(parallel_nor_conf_t))
-        return -1;
+    parallel_nor_conf_t *pnor_conf_p = (parallel_nor_conf_t *)conf;
 
-    pnor_conf = *(parallel_nor_conf_t *)conf;
+    if (conf_size < sizeof(parallel_nor_conf_t))
+    {
+        ERROR_PRINT("Parallel NOR conf size mismatch: %lu < %lu\r\n",
+            (unsigned long)conf_size,
+            (unsigned long)sizeof(parallel_nor_conf_t));
+        return -1;
+    }
+
+    if (!pnor_conf_p->addr_cycles ||
+        pnor_conf_p->addr_cycles > MAX_ADDR_CYCLES)
+    {
+        ERROR_PRINT("Invalid parallel NOR address cycles %u\r\n",
+            pnor_conf_p->addr_cycles);
+        return -1;
+    }
+
+    if (pnor_conf_p->id_addr_cycles > MAX_ADDR_CYCLES)
+    {
+        ERROR_PRINT("Invalid parallel NOR ID address cycles %u\r\n",
+            pnor_conf_p->id_addr_cycles);
+        return -1;
+    }
+
+    if (pnor_conf_p->busy_bit > MAX_BUSY_BIT)
+    {
+        ERROR_PRINT("Invalid parallel NOR busy bit %u\r\n",
+            pnor_conf_p->busy_bit);
+        return -1;
+    }
+
+    pnor_conf = *pnor_conf_p;
 
     pnor_gpio_init();
     pnor_fsmc_init();
@@ -121,55 +140,89 @@ static int pnor_init(void *conf, uint32_t conf_size)
 
 static void pnor_uninit()
 {
-    /* TODO */
+    FSMC_NANDCmd(FSMC_Bank2_NAND, DISABLE);
+    FSMC_NANDDeInit(FSMC_Bank2_NAND);
+    RCC_AHBPeriphClockCmd(RCC_AHBPeriph_FSMC, DISABLE);
 }
 
+static void pnor_send_cmd(uint8_t cmd)
+{
+    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = cmd;
+}
+
+/* Address is clocked in most significant byte first, as expected by the serial
+ * flash style command set these devices implement.
+ */
+static void pnor_send_addr(uint32_t addr, uint8_t cycles)
+{
+    while (cycles--)
+        *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = (uint8_t)(addr >> (cycles * 8));
+}
+
+static uint8_t pnor_read_data_byte()
+{
+    return *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
+}
+
+/* Single shot, non blocking. Called from the main loop while a write is in
+ * flight, so it must never spin.
+ */
 static uint32_t pnor_read_status()
 {
-    uint32_t status, timeout = 0x1000000;
     uint8_t data;
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.status_cmd;
-    data = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
+    if (pnor_conf.status_cmd == UNDEFINED_CMD)
+        return FLASH_STATUS_READY;
 
-    if (pnor_conf.busy_state == 1 && (data & (1 << pnor_conf.busy_bit)))
-        status = FLASH_BUSY;
-    else if (pnor_conf.busy_state == 0 && !(data & (1 << pnor_conf.busy_bit)))
-        status = FLASH_BUSY;
-    else
-        status = FLASH_READY;
+    pnor_send_cmd(pnor_conf.status_cmd);
+    data = pnor_read_data_byte();
 
-    /* Wait for an operation to complete or a TIMEOUT to occur */
-    while (status == FLASH_BUSY && timeout)
+    if (!!(data & (1 << pnor_conf.busy_bit)) == !!pnor_conf.busy_state)
+        return FLASH_STATUS_BUSY;
+
+    return FLASH_STATUS_READY;
+}
+
+/* Blocking variant used by the synchronous erase path */
+static uint32_t pnor_get_status()
+{
+    uint32_t status, timeout = 0x1000000;
+
+    status = pnor_read_status();
+
+    while (status == FLASH_STATUS_BUSY && timeout)
     {
-        *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.status_cmd;
-        data = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
-
-        if (pnor_conf.busy_state == 1 && (data & (1 << pnor_conf.busy_bit)))
-            status = FLASH_BUSY;
-        else if (pnor_conf.busy_state == 0 && !(data & (1 << pnor_conf.busy_bit)))
-            status = FLASH_BUSY;
-        else
-            status = FLASH_READY;
-
+        status = pnor_read_status();
         timeout--;
     }
 
     if (!timeout)
-        status = FLASH_TIMEOUT;
+        status = FLASH_STATUS_TIMEOUT;
 
     return status;
 }
 
 static void pnor_read_id(chip_id_t *chip_id)
 {
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.read_id_cmd;
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = 0x00;
+    if (pnor_conf.read_id_cmd == UNDEFINED_CMD)
+    {
+        chip_id->maker_id = 0;
+        chip_id->device_id = 0;
+        chip_id->third_id = 0;
+        chip_id->fourth_id = 0;
+        chip_id->fifth_id = 0;
+        return;
+    }
 
-    chip_id->maker_id  = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
-    chip_id->device_id = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
-    chip_id->third_id  = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
-    chip_id->fourth_id = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
+    pnor_send_cmd(pnor_conf.read_id_cmd);
+    /* JEDEC read ID (0x9F) takes no address, 0x90 style takes one cycle */
+    pnor_send_addr(0, pnor_conf.id_addr_cycles);
+
+    chip_id->maker_id  = pnor_read_data_byte();
+    chip_id->device_id = pnor_read_data_byte();
+    chip_id->third_id  = pnor_read_data_byte();
+    chip_id->fourth_id = pnor_read_data_byte();
+    chip_id->fifth_id  = pnor_read_data_byte();
 }
 
 static void pnor_write_enable()
@@ -177,7 +230,7 @@ static void pnor_write_enable()
     if (pnor_conf.write_en_cmd == UNDEFINED_CMD)
         return;
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.write_en_cmd;
+    pnor_send_cmd(pnor_conf.write_en_cmd);
 }
 
 static void pnor_write_page_async(uint8_t *buf, uint32_t page,
@@ -186,33 +239,33 @@ static void pnor_write_page_async(uint8_t *buf, uint32_t page,
     uint32_t i;
     uint32_t addr = page << pnor_conf.page_offset;
 
+    if (pnor_conf.write_cmd == UNDEFINED_CMD)
+        return;
+
     pnor_write_enable();
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.write_cmd;
-
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(addr);
+    pnor_send_cmd(pnor_conf.write_cmd);
+    pnor_send_addr(addr, pnor_conf.addr_cycles);
 
     for (i = 0; i < page_size; i++)
         *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA) = buf[i];
 }
 
 static uint32_t pnor_read_data(uint8_t *buf, uint32_t page,
-    uint32_t page_offset, uint32_t data_size)
+    uint32_t offset, uint32_t data_size)
 {
-    uint32_t i, addr = (page << pnor_conf.page_offset) + page_offset;
+    uint32_t i, addr = (page << pnor_conf.page_offset) + offset;
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.read_cmd;
+    if (pnor_conf.read_cmd == UNDEFINED_CMD)
+        return FLASH_STATUS_INVALID_CMD;
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(addr);
+    pnor_send_cmd(pnor_conf.read_cmd);
+    pnor_send_addr(addr, pnor_conf.addr_cycles);
 
     for (i = 0; i < data_size; i++)
-        buf[i] = *(__IO uint8_t *)(Bank_NOR_ADDR | DATA_AREA);
+        buf[i] = pnor_read_data_byte();
 
-    return FLASH_READY;
+    return FLASH_STATUS_READY;
 }
 
 static uint32_t pnor_read_page(uint8_t *buf, uint32_t page, uint32_t page_size)
@@ -223,6 +276,11 @@ static uint32_t pnor_read_page(uint8_t *buf, uint32_t page, uint32_t page_size)
 static uint32_t pnor_read_spare_data(uint8_t *buf, uint32_t page,
     uint32_t offset, uint32_t data_size)
 {
+    (void)buf;
+    (void)page;
+    (void)offset;
+    (void)data_size;
+
     return FLASH_STATUS_INVALID_CMD;
 }
 
@@ -230,18 +288,18 @@ static uint32_t pnor_erase_block(uint32_t page)
 {
     uint32_t addr = page << pnor_conf.page_offset;
 
+    if (pnor_conf.erase_cmd == UNDEFINED_CMD)
+        return FLASH_STATUS_INVALID_CMD;
+
     pnor_write_enable();
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | CMD_AREA) = pnor_conf.erase_cmd;
+    pnor_send_cmd(pnor_conf.erase_cmd);
+    pnor_send_addr(addr, pnor_conf.addr_cycles);
 
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(addr);
-    *(__IO uint8_t *)(Bank_NOR_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(addr);
-
-    return pnor_read_status();
+    return pnor_get_status();
 }
 
-static inline bool pnor_is_bb_supported()
+static bool pnor_is_bb_supported()
 {
     return false;
 }

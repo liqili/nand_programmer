@@ -1080,6 +1080,12 @@ static int np_cmd_nand_conf(np_prog_t *prog)
     np_fill_chip_info(conf_cmd, prog);
     np_print_chip_info(prog);
 
+    if (conf_cmd->hal >= sizeof(hal) / sizeof(hal[0]))
+    {
+        ERROR_PRINT("Invalid HAL %u\r\n", conf_cmd->hal);
+        return NP_ERR_CMD_INVALID;
+    }
+
     prog->hal = conf_cmd->hal;
     if (hal[prog->hal]->init(conf_cmd->hal_conf,
         prog->rx_buf_len - sizeof(np_conf_cmd_t)))

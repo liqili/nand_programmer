@@ -33,7 +33,7 @@ ParallelSerialChipDbDialog::ParallelSerialChipDbDialog(ParallelSerialChipDb *chi
         HEADER_MED_WIDTH);
 
     for (int i = ParallelSerialChipDb::CHIP_PARAM_PAGE_OFF;
-         i <= ParallelSerialChipDb::CHIP_PARAM_FREQ; i++)
+         i <= ParallelSerialChipDb::CHIP_PARAM_AR_SETUP_TIME; i++)
     {
         ui->chipDbTableView->setColumnWidth(i, HEADER_MED_WIDTH);
     }

@@ -54,6 +54,12 @@ QVariant ParallelSerialChipDbTableModel::data(const QModelIndex &index,
     case ParallelSerialChipDb::CHIP_PARAM_PAGE_OFF:
         return (uint)chipDb->getChipParam(index.row(),
             ParallelSerialChipInfo::CHIP_PARAM_PAGE_OFF);
+    case ParallelSerialChipDb::CHIP_PARAM_ADDR_CYCLES:
+        return (uint)chipDb->getChipParam(index.row(),
+            ParallelSerialChipInfo::CHIP_PARAM_ADDR_CYCLES);
+    case ParallelSerialChipDb::CHIP_PARAM_ID_ADDR_CYCLES:
+        return (uint)chipDb->getChipParam(index.row(),
+            ParallelSerialChipInfo::CHIP_PARAM_ID_ADDR_CYCLES);
     case ParallelSerialChipDb::CHIP_PARAM_READ_CMD:
         chipDb->getHexStringFromParam(chipDb->getChipParam(index.row(),
             ParallelSerialChipInfo::CHIP_PARAM_READ_CMD), paramStr);
@@ -84,9 +90,6 @@ QVariant ParallelSerialChipDbTableModel::data(const QModelIndex &index,
     case ParallelSerialChipDb::CHIP_PARAM_BUSY_STATE:
         return (uint)chipDb->getChipParam(index.row(),
             ParallelSerialChipInfo::CHIP_PARAM_BUSY_STATE);
-    case ParallelSerialChipDb::CHIP_PARAM_FREQ:
-        return (uint)chipDb->getChipParam(index.row(),
-            ParallelSerialChipInfo::CHIP_PARAM_FREQ);
     case ParallelSerialChipDb::CHIP_PARAM_SETUP_TIME:
         return (uint)chipDb->getChipParam(index.row(),
             ParallelSerialChipInfo::CHIP_PARAM_SETUP_TIME);
@@ -142,6 +145,10 @@ QVariant ParallelSerialChipDbTableModel::headerData(int section,
         case ParallelSerialChipDb::CHIP_PARAM_BLOCK_SIZE: return tr("Block size");
         case ParallelSerialChipDb::CHIP_PARAM_TOTAL_SIZE: return tr("Total size");
         case ParallelSerialChipDb::CHIP_PARAM_PAGE_OFF: return tr("Page off.");
+        case ParallelSerialChipDb::CHIP_PARAM_ADDR_CYCLES:
+            return tr("Addr. cycles");
+        case ParallelSerialChipDb::CHIP_PARAM_ID_ADDR_CYCLES:
+            return tr("ID addr. cycles");
         case ParallelSerialChipDb::CHIP_PARAM_READ_CMD: return tr("Read com.");
         case ParallelSerialChipDb::CHIP_PARAM_READ_ID_CMD: return tr("Read ID com.");
         case ParallelSerialChipDb::CHIP_PARAM_WRITE_CMD: return tr("Write com.");
@@ -150,7 +157,6 @@ QVariant ParallelSerialChipDbTableModel::headerData(int section,
         case ParallelSerialChipDb::CHIP_PARAM_STATUS_CMD: return tr("Status com.");
         case ParallelSerialChipDb::CHIP_PARAM_BUSY_BIT: return tr("Busy bit");
         case ParallelSerialChipDb::CHIP_PARAM_BUSY_STATE: return tr("Busy bit state");
-        case ParallelSerialChipDb::CHIP_PARAM_FREQ: return tr("Freq. (kHz)");
         case ParallelSerialChipDb::CHIP_PARAM_SETUP_TIME: return tr("Setup time");
         case ParallelSerialChipDb::CHIP_PARAM_WAIT_SETUP_TIME: return tr("Wait setup time");
         case ParallelSerialChipDb::CHIP_PARAM_HOLD_SETUP_TIME: return tr("Hold setup time");
@@ -179,6 +185,10 @@ QVariant ParallelSerialChipDbTableModel::headerData(int section,
             return tr("Total size in bytes");
         case ParallelSerialChipDb::CHIP_PARAM_PAGE_OFF:
             return tr("Page offset in address");
+        case ParallelSerialChipDb::CHIP_PARAM_ADDR_CYCLES:
+            return tr("Number of address cycles per transfer (1-4)");
+        case ParallelSerialChipDb::CHIP_PARAM_ID_ADDR_CYCLES:
+            return tr("Address cycles for read ID command: 0 for JEDEC 9Fh, 1 for 90h");
         case ParallelSerialChipDb::CHIP_PARAM_READ_CMD:
             return tr("Page read command");
         case ParallelSerialChipDb::CHIP_PARAM_READ_ID_CMD:
@@ -195,8 +205,6 @@ QVariant ParallelSerialChipDbTableModel::headerData(int section,
             return tr("Busy bit number (0-7) in status register");
         case ParallelSerialChipDb::CHIP_PARAM_BUSY_STATE:
             return tr("Busy bit active state (0/1)");
-        case ParallelSerialChipDb::CHIP_PARAM_FREQ:
-            return tr("Maximum supported frequency in kHz");
         case ParallelSerialChipDb::CHIP_PARAM_SETUP_TIME:
             return tr("Setup time in ns");
         case ParallelSerialChipDb::CHIP_PARAM_WAIT_SETUP_TIME:
@@ -267,6 +275,22 @@ bool ParallelSerialChipDbTableModel::setData(const QModelIndex &index,
         chipDb->setChipParam(index.row(),
             ParallelSerialChipInfo::CHIP_PARAM_PAGE_OFF, paramVal);
         return true;
+    case ParallelSerialChipDb::CHIP_PARAM_ADDR_CYCLES:
+        if (chipDb->getParamFromString(value.toString(), paramVal))
+            return false;
+        if (!chipDb->isParamValid(paramVal, 1, 4))
+            return false;
+        chipDb->setChipParam(index.row(),
+            ParallelSerialChipInfo::CHIP_PARAM_ADDR_CYCLES, paramVal);
+        return true;
+    case ParallelSerialChipDb::CHIP_PARAM_ID_ADDR_CYCLES:
+        if (chipDb->getParamFromString(value.toString(), paramVal))
+            return false;
+        if (!chipDb->isParamValid(paramVal, 0, 4))
+            return false;
+        chipDb->setChipParam(index.row(),
+            ParallelSerialChipInfo::CHIP_PARAM_ID_ADDR_CYCLES, paramVal);
+        return true;
     case ParallelSerialChipDb::CHIP_PARAM_READ_CMD:
         if (chipDb->getParamFromHexString(value.toString(), paramVal))
             return false;
@@ -330,12 +354,6 @@ bool ParallelSerialChipDbTableModel::setData(const QModelIndex &index,
 	            return false;
 	        chipDb->setChipParam(index.row(),
 	            ParallelSerialChipInfo::CHIP_PARAM_BUSY_STATE, paramVal);
-	        return true;
-	    case ParallelSerialChipDb::CHIP_PARAM_FREQ:
-	        if (chipDb->getParamFromString(value.toString(), paramVal))
-	            return false;
-	        chipDb->setChipParam(index.row(),
-	            ParallelSerialChipInfo::CHIP_PARAM_FREQ, paramVal);
 	        return true;
 	    case ParallelSerialChipDb::CHIP_PARAM_SETUP_TIME:
 	        if (chipDb->getParamFromString(value.toString(), paramVal))
