@@ -46,6 +46,7 @@ endif ()
 # Copy CSV files into the build directory
 file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
 file(COPY ${CMAKE_SOURCE_DIR}/nando_spi_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
+file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_serial_chip_db.csv DESTINATION ${CMAKE_BINARY_DIR}/)
 
 # Link with Qt5 Widgets
 target_link_libraries(nand_programmer Qt5::Widgets Qt5::SerialPort Boost::system Boost::thread)
@@ -68,6 +69,9 @@ if (APPLE)
     file(COPY ${CMAKE_SOURCE_DIR}/nando_spi_chip_db.csv
             DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
 
+    file(COPY ${CMAKE_SOURCE_DIR}/nando_parallel_serial_chip_db.csv
+            DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
+
 
 
     # Set the path to your icon file
@@ -76,24 +80,36 @@ if (APPLE)
     file(COPY ${MACOS_APP_ICON} DESTINATION ${CMAKE_BINARY_DIR}/nand_programmer.app/Contents/Resources)
 
 
-    # Add the post-build command to run macdeployqt
-    add_custom_command(TARGET nand_programmer POST_BUILD
-            COMMAND ${MACDEPLOYQT_PATH} ${CMAKE_BINARY_DIR}/nand_programmer.app
-            COMMENT "Running macdeployqt to bundle Qt libraries"
-            )
-
-    # Path to your create-dmg command
+    # --- Combined POST_BUILD: macdeployqt + code sign + DMG ---
+    # CMake allows only one POST_BUILD per target, so chain all commands
     find_program(CREATE_DMG create-dmg)
 
     if(CREATE_DMG)
+        set(DMG_STAGE_DIR ${CMAKE_BINARY_DIR}/dmg_staging)
         add_custom_command(TARGET nand_programmer POST_BUILD
-                COMMAND ${CREATE_DMG}
-                --volname "Nand Programmer"
-                ${CMAKE_BINARY_DIR}/nand_programmer.dmg
-                ${CMAKE_BINARY_DIR}/nand_programmer.app
-                COMMENT "Creating macOS DMG"
+                COMMAND ${MACDEPLOYQT_PATH} ${CMAKE_BINARY_DIR}/nand_programmer.app
+                COMMAND codesign -f -s - --timestamp --deep ${CMAKE_BINARY_DIR}/nand_programmer.app
+                COMMAND ${CMAKE_COMMAND} -E remove_directory ${DMG_STAGE_DIR}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${DMG_STAGE_DIR}
+                COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/nand_programmer.app ${DMG_STAGE_DIR}/nand_programmer.app
+                COMMAND ${CREATE_DMG} --volname "Nand Programmer"
+                        --window-size 500 300
+                        --app-drop-link 280 150
+                        --no-internet-enable
+                        --skip-jenkins
+                        ${CMAKE_BINARY_DIR}/nand_programmer.dmg
+                        ${DMG_STAGE_DIR}
+                COMMAND ${CMAKE_COMMAND} -E remove_directory ${DMG_STAGE_DIR}
+                COMMENT "Bundle Qt libs → sign → create DMG"
                 )
     else()
-        message(WARNING "create-dmg not found, DMG creation will be skipped.")
+        add_custom_command(TARGET nand_programmer POST_BUILD
+                COMMAND ${MACDEPLOYQT_PATH} ${CMAKE_BINARY_DIR}/nand_programmer.app
+                COMMAND codesign -f -s - --timestamp --deep ${CMAKE_BINARY_DIR}/nand_programmer.app
+                COMMAND hdiutil create -format UDZO -srcfolder ${CMAKE_BINARY_DIR}/nand_programmer.app
+                        -volname "Nand Programmer"
+                        ${CMAKE_BINARY_DIR}/nand_programmer.dmg
+                COMMENT "Bundle Qt libs → sign → create DMG (hdiutil)"
+                )
     endif()
 endif ()

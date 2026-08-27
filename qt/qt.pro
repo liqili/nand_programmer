@@ -39,6 +39,10 @@ SOURCES += main.cpp\
     spi_chip_db_dialog.cpp \
     spi_chip_db_table_model.cpp \
     spi_chip_info.cpp \
+    parallel_serial_chip_db.cpp \
+    parallel_serial_chip_db_dialog.cpp \
+    parallel_serial_chip_db_table_model.cpp \
+    parallel_serial_chip_info.cpp \
     writer.cpp \
     reader.cpp \
     settings_programmer_dialog.cpp \
@@ -63,6 +67,10 @@ HEADERS += main_window.h \
     spi_chip_db_dialog.h \
     spi_chip_db_table_model.h \
     spi_chip_info.h \
+    parallel_serial_chip_db.h \
+    parallel_serial_chip_db_dialog.h \
+    parallel_serial_chip_db_table_model.h \
+    parallel_serial_chip_info.h \
     sync_buffer.h \
     writer.h \
     reader.h \
@@ -79,7 +87,8 @@ FORMS += main_window.ui \
     settings_programmer_dialog.ui \
     about_dialog.ui \
     firmware_update_dialog.ui \
-    spi_chip_db_dialog.ui
+    spi_chip_db_dialog.ui \
+    parallel_serial_chip_db_dialog.ui
 
 QMAKE_CXXFLAGS += -std=c++11 -Wextra -Werror
 mingw:QMAKE_CXXFLAGS += -mno-ms-bitfields
@@ -97,11 +106,13 @@ win32: {
 
 DISTFILES += \
     nando_parallel_chip_db.csv \
-    nando_spi_chip_db.csv
+    nando_spi_chip_db.csv \
+    nando_parallel_serial_chip_db.csv
 
 install_conf.path = $$DESTDIR
 install_conf.files += $$PWD/nando_parallel_chip_db.csv \
-    $$PWD/nando_spi_chip_db.csv
+    $$PWD/nando_spi_chip_db.csv \
+    $$PWD/nando_parallel_serial_chip_db.csv
 
 INSTALLS += install_conf
 

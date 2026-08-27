@@ -334,6 +334,7 @@
     <addaction name="actionProgrammer"/>
     <addaction name="actionParallelChipDb"/>
     <addaction name="actionSpiChipDb"/>
+    <addaction name="actionParallelSerialChipDb"/>
     <addaction name="separator"/>
     <addaction name="actionFirmwareUpdate"/>
    </widget>
@@ -447,6 +448,11 @@
   <action name="actionSpiChipDb">
    <property name="text">
     <string>SPI chip database</string>
+   </property>
+  </action>
+  <action name="actionParallelSerialChipDb">
+   <property name="text">
+    <string>Parallel serial chip database</string>
    </property>
   </action>
  </widget>

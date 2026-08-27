@@ -12,6 +12,7 @@
 #include "version.h"
 #include "flash.h"
 #include "spi_flash.h"
+#include "parallel_nor_flash.h"
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -257,7 +258,7 @@ typedef struct
 static np_comm_cb_t *np_comm_cb;
 static np_prog_t prog;
 
-static flash_hal_t *hal[] = { &hal_fsmc, &hal_spi };
+static flash_hal_t *hal[] = { &hal_fsmc, &hal_spi, &hal_parallel_nor };
 
 uint8_t np_packet_send_buf[NP_PACKET_BUF_SIZE];
 
@@ -1078,6 +1079,12 @@ static int np_cmd_nand_conf(np_prog_t *prog)
 
     np_fill_chip_info(conf_cmd, prog);
     np_print_chip_info(prog);
+
+    if (conf_cmd->hal >= sizeof(hal) / sizeof(hal[0]))
+    {
+        ERROR_PRINT("Invalid HAL %u\r\n", conf_cmd->hal);
+        return NP_ERR_CMD_INVALID;
+    }
 
     prog->hal = conf_cmd->hal;
     if (hal[prog->hal]->init(conf_cmd->hal_conf,

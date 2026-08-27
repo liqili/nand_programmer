@@ -8,6 +8,7 @@
 #include "settings_programmer_dialog.h"
 #include "parallel_chip_db_dialog.h"
 #include "spi_chip_db_dialog.h"
+#include "parallel_serial_chip_db_dialog.h"
 #include "firmware_update_dialog.h"
 #include "parallel_chip_db.h"
 #include "spi_chip_db.h"
@@ -93,6 +94,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent),
         SLOT(slotSettingsParallelChipDb()));
     connect(ui->actionSpiChipDb, SIGNAL(triggered()), this,
         SLOT(slotSettingsSpiChipDb()));
+    connect(ui->actionParallelSerialChipDb, SIGNAL(triggered()), this,
+        SLOT(slotSettingsParallelSerialChipDb()));
     connect(ui->actionAbout, SIGNAL(triggered()), this,
         SLOT(slotAboutDialog()));
     connect(ui->detectPushButton, SIGNAL(clicked()), this,
@@ -697,6 +700,8 @@ void MainWindow::slotSelectChip(int selectedChipNum)
         currentChipDb = &parallelChipDb;
     else if ((chipInfo = spiChipDb.chipInfoGetByName(name)))
         currentChipDb = &spiChipDb;
+    else if ((chipInfo = parallelSerialChipDb.chipInfoGetByName(name)))
+        currentChipDb = &parallelSerialChipDb;
     else
     {
         qCritical() << "Failed to find chip in DB";
@@ -716,6 +721,11 @@ void MainWindow::detectChipDelayed()
 {
 
     if (currentChipDb == &spiChipDb)
+    {
+        // Search in next DB
+        detectChip(&parallelSerialChipDb);
+    }
+    else if (currentChipDb == &parallelSerialChipDb)
         qInfo() << "Chip not found in database";
     else
     {
@@ -884,6 +894,14 @@ void MainWindow::slotSettingsSpiChipDb()
         updateChipList();
 }
 
+void MainWindow::slotSettingsParallelSerialChipDb()
+{
+    ParallelSerialChipDbDialog chipDbDialog(&parallelSerialChipDb, this);
+
+    if (chipDbDialog.exec() == QDialog::Accepted)
+        updateChipList();
+}
+
 void MainWindow::updateChipList()
 {
     int i = 0;
@@ -894,6 +912,7 @@ void MainWindow::updateChipList()
 
     chipNames.append(parallelChipDb.getNames());
     chipNames.append(spiChipDb.getNames());
+    chipNames.append(parallelSerialChipDb.getNames());
     foreach (const QString &str, chipNames)
     {
         if (str.isEmpty())

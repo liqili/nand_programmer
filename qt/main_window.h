@@ -9,6 +9,7 @@
 #include "programmer.h"
 #include "parallel_chip_db.h"
 #include "spi_chip_db.h"
+#include "parallel_serial_chip_db.h"
 #include <QMainWindow>
 #include <QVector>
 #include <QElapsedTimer>
@@ -32,6 +33,7 @@ private:
     ChipId chipId;
     ParallelChipDb parallelChipDb;
     SpiChipDb spiChipDb;
+    ParallelSerialChipDb parallelSerialChipDb;
     ChipDb *currentChipDb;
     QElapsedTimer timer;
     bool isAlertEnabled;
@@ -84,6 +86,7 @@ public slots:
     void slotSettingsProgrammer();
     void slotSettingsParallelChipDb();
     void slotSettingsSpiChipDb();
+    void slotSettingsParallelSerialChipDb();
     void slotAboutDialog();
     void slotFirmwareUpdateDialog();
 };
