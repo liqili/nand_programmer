@@ -49,7 +49,16 @@ SOURCES += main.cpp\
     err.cpp \
     about_dialog.cpp \
     firmware_update_dialog.cpp \
-    clickcombobox.cpp
+    clickcombobox.cpp \
+    ecc_settings_dialog.cpp \
+    ecc/gf.cpp \
+    ecc/bch_codec.cpp \
+    ecc/hamming_codec.cpp \
+    ecc/rs_codec.cpp \
+    ecc/ecc_scheme.cpp \
+    ecc/ecc_engine.cpp \
+    ecc/ecc_stream.cpp \
+    ecc/image_probe.cpp
 
 HEADERS += main_window.h \
     chip_db.h \
@@ -80,7 +89,16 @@ HEADERS += main_window.h \
     version.h \
     firmware_update_dialog.h \
     settings.h \
-    clickcombobox.h
+    clickcombobox.h \
+    ecc_settings_dialog.h \
+    ecc/gf.h \
+    ecc/bch_codec.h \
+    ecc/hamming_codec.h \
+    ecc/rs_codec.h \
+    ecc/ecc_scheme.h \
+    ecc/ecc_engine.h \
+    ecc/ecc_stream.h \
+    ecc/image_probe.h
 
 FORMS += main_window.ui \
     parallel_chip_db_dialog.ui \

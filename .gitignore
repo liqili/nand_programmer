@@ -10,6 +10,8 @@ qt/qt.pro.user*
 kicad/nand_programmator-backups/
 test/pnor_test
 test/nand_test
+test/bbt_test
+test/ecc_test
 test/*.dSYM/
 sim/out/
 sim/sim_fw.elf

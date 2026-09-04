@@ -58,6 +58,10 @@ public:
     quint64 extendedTotalSizeGetById(int id);
     quint64 extendedTotalSizeGetByName(const QString &name);
     quint64 blockCountGetByName(const QString &name);
+    /* Bad block marker position within the page spare area, or -1 when the
+     * chip is not in the database.
+     */
+    int bbMarkOffsetGetByName(const QString &name);
     void addChip(ChipInfo *chipInfo);
     void delChip(int index);
     int size();

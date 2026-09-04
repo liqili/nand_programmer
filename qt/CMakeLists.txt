@@ -32,7 +32,8 @@ find_package(Boost REQUIRED COMPONENTS system thread)
 # If you use Boost headers
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${CMAKE_SOURCE_DIR} ${Qt5Core_INCLUDE_DIRS} ${Qt5SerialPort_INCLUDE_DIRS})
-file(GLOB APP_SOURCES ${CMAKE_SOURCE_DIR}/*.c ${CMAKE_SOURCE_DIR}/*.cpp ${CMAKE_SOURCE_DIR}/*.ui)
+file(GLOB APP_SOURCES ${CMAKE_SOURCE_DIR}/*.c ${CMAKE_SOURCE_DIR}/*.cpp ${CMAKE_SOURCE_DIR}/*.ui
+        ${CMAKE_SOURCE_DIR}/ecc/*.cpp)
 if (APPLE)
     add_executable(nand_programmer
             MACOSX_BUNDLE  # Specify this flag to create a macOS app bundle

@@ -13,6 +13,7 @@
 #include "fsmc_nand.h"
 #include "uart.h"
 #include "sim_chip_conf.h"
+#include "ecc_page.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -50,6 +51,19 @@ typedef struct __attribute__((__packed__))
 /* Block 1 is the scratch block, block 2 checks that erase stays inside its
  * own block, and block 1015 exercises the upper row address byte.
  */
+/* The chip model refuses programs aimed at block 6, which is the only way to
+ * reach the firmware's failure handling without a worn out device.
+ */
+#define FAIL_BLOCK 6
+#define FAIL_PAGE (FAIL_BLOCK * PAGES_PER_BLOCK)
+
+/* Fresh blocks for the later checks, so nothing they do depends on what an
+ * earlier check left behind. NAND programming only clears bits, so a block
+ * that already holds data cannot simply be written over.
+ */
+#define AFTER_FAIL_PAGE (8 * PAGES_PER_BLOCK)
+#define ECC_BLOCK_PAGE (12 * PAGES_PER_BLOCK)
+
 #define BLOCK1_PAGE (1 * PAGES_PER_BLOCK)
 #define BLOCK2_PAGE (2 * PAGES_PER_BLOCK)
 #define HIGH_PAGE (1015 * PAGES_PER_BLOCK)
@@ -257,6 +271,140 @@ int main(void)
 
     /* A high row must not alias onto a low one */
     expect(page_is_erased(BLOCK1_PAGE, 64), "high row did not alias low row");
+
+    /* ---- program failure is surfaced, not swallowed ---- */
+    printf("program failure handling at block %d\r\n", FAIL_BLOCK);
+    hal_fsmc.erase_block(FAIL_PAGE);
+    fill(ref, 64, 0x61);
+    status = program_page(ref, FAIL_PAGE, 64);
+    printf("failed-program status: %lu (expect %lu)\r\n",
+        (unsigned long)status, (unsigned long)FLASH_STATUS_ERROR);
+    expect(status == FLASH_STATUS_ERROR,
+        "a refused program reports FLASH_STATUS_ERROR");
+
+    /* Another block must still work: the failure is the device's, not a
+     * wedged driver. It has to be an erased one - programming can only clear
+     * bits, so a block still holding earlier data would never read back as
+     * the new pattern.
+     */
+    hal_fsmc.erase_block(AFTER_FAIL_PAGE);
+    expect(roundtrip(AFTER_FAIL_PAGE, 64, 0x62),
+        "a fresh block still programs after a failure");
+
+    /* ---- retiring a block ---- */
+    /* This is the mechanism np_nand_mark_bad() relies on: programming can only
+     * clear bits, so a page of 0xFF with one byte zeroed changes that byte and
+     * nothing else. Done on a good block so the write itself succeeds.
+     */
+    hal_fsmc.erase_block(BLOCK1_PAGE);
+
+    memset(buf, 0xFF, PAGE_FULL);
+    buf[SIM_PAGE_SIZE + 0] = 0x00;          /* bad block marker */
+    expect(program_page(buf, BLOCK1_PAGE, PAGE_FULL) == FLASH_STATUS_READY,
+        "marker page programs");
+
+    memset(buf, 0, PAGE_FULL);
+    hal_fsmc.read_page(buf, BLOCK1_PAGE, PAGE_FULL);
+    expect(buf[SIM_PAGE_SIZE] == 0x00, "the marker byte reads back as 0x00");
+    expect(all_erased(buf, SIM_PAGE_SIZE),
+        "the data area is untouched by marking");
+    {
+        int spare_clean = 1;
+        uint32_t i;
+
+        for (i = 1; i < SIM_SPARE_SIZE; i++)
+        {
+            if (buf[SIM_PAGE_SIZE + i] != 0xFF)
+                spare_clean = 0;
+        }
+        expect(spare_clean, "every other spare byte is untouched");
+    }
+
+    /* And it survives a re-read, which is what a later bad block scan does. */
+    memset(buf, 0, 64);
+    hal_fsmc.read_page(buf, BLOCK1_PAGE, SIM_PAGE_SIZE + 1);
+    expect(buf[SIM_PAGE_SIZE] != 0xFF,
+        "a later scan would see this block as bad");
+
+    /* Erasing clears the marker again, which is why a retired block must never
+     * be handed to erase afterwards.
+     */
+    hal_fsmc.erase_block(BLOCK1_PAGE);
+    memset(buf, 0, 64);
+    hal_fsmc.read_page(buf, BLOCK1_PAGE, SIM_PAGE_SIZE + 1);
+    expect(buf[SIM_PAGE_SIZE] == 0xFF, "erase clears the marker again");
+
+    /* ---- a page carrying real ECC parity ---- */
+    /* The correction itself lives in the host application, so what matters
+     * here is the ground it stands on: that a page carrying parity survives a
+     * real write and read through the FSMC driver and the chip model without
+     * a single byte moving, spare included. If the transport mangled the
+     * spare area, every correction built on top of it would be meaningless.
+     */
+    printf("ECC page round trip at block %d\r\n", ECC_BLOCK_PAGE / PAGES_PER_BLOCK);
+    hal_fsmc.erase_block(ECC_BLOCK_PAGE);
+
+    expect(program_page((uint8_t *)ecc_page, ECC_BLOCK_PAGE, ECC_PAGE_TOTAL) ==
+        FLASH_STATUS_READY, "ECC page programs");
+
+    memset(buf, 0, PAGE_FULL);
+    expect(hal_fsmc.read_page(buf, ECC_BLOCK_PAGE, ECC_PAGE_TOTAL) ==
+        FLASH_STATUS_READY, "ECC page reads back");
+    expect(same(buf, ecc_page, ECC_PAGE_SIZE), "data area survives byte for byte");
+    expect(same(buf + ECC_PAGE_SIZE, ecc_page + ECC_PAGE_SIZE, ECC_PAGE_SPARE),
+        "parity in the spare area survives byte for byte");
+
+    /* ---- bit errors on the chip are read back faithfully ---- */
+    /* Reproduced with real NAND semantics rather than a hook in the model:
+     * programming can only clear bits, so writing 0xFF with three bits zeroed
+     * clears exactly those three and leaves everything else alone. That is
+     * what a weak cell looks like from the outside.
+     */
+    {
+        uint32_t i, flipped = 0, other = 0;
+
+        memset(ref, 0xFF, PAGE_FULL);
+        for (i = 0; i < ECC_FLIP_COUNT; i++)
+        {
+            ref[ecc_flips[i].byte] &= (uint8_t)~(1u << ecc_flips[i].bit);
+        }
+
+        expect(program_page(ref, ECC_BLOCK_PAGE, ECC_PAGE_TOTAL) ==
+            FLASH_STATUS_READY, "mask page programs");
+
+        memset(buf, 0, PAGE_FULL);
+        hal_fsmc.read_page(buf, ECC_BLOCK_PAGE, ECC_PAGE_TOTAL);
+
+        for (i = 0; i < ECC_PAGE_TOTAL; i++)
+        {
+            uint8_t diff = (uint8_t)(buf[i] ^ ecc_page[i]);
+            uint32_t k;
+            int expected = 0;
+
+            if (!diff)
+                continue;
+
+            for (k = 0; k < ECC_FLIP_COUNT; k++)
+            {
+                if (ecc_flips[k].byte == i &&
+                    diff == (uint8_t)(1u << ecc_flips[k].bit))
+                {
+                    expected = 1;
+                }
+            }
+
+            if (expected)
+                flipped++;
+            else
+                other++;
+        }
+
+        printf("read back: %lu injected bit(s) present, %lu unexpected\r\n",
+            (unsigned long)flipped, (unsigned long)other);
+        expect(flipped == ECC_FLIP_COUNT,
+            "every injected bit error is visible on read back");
+        expect(other == 0, "and nothing else changed");
+    }
 
     printf("=== SIM %s (%d failures) ===\r\n", failures ? "FAIL" : "PASS",
         failures);

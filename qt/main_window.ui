@@ -320,6 +320,8 @@
     <addaction name="actionWrite"/>
     <addaction name="actionVerify"/>
     <addaction name="actionReadBadBlocks"/>
+    <addaction name="separator"/>
+    <addaction name="actionCheckImage"/>
    </widget>
    <widget class="QMenu" name="menuProgrammer">
     <property name="title">
@@ -332,6 +334,7 @@
      <string>Settings</string>
     </property>
     <addaction name="actionProgrammer"/>
+    <addaction name="actionEcc"/>
     <addaction name="actionParallelChipDb"/>
     <addaction name="actionSpiChipDb"/>
     <addaction name="actionParallelSerialChipDb"/>
@@ -409,6 +412,22 @@
   <action name="actionProgrammer">
    <property name="text">
     <string>Programmer</string>
+   </property>
+  </action>
+  <action name="actionCheckImage">
+   <property name="text">
+    <string>Check Image...</string>
+   </property>
+   <property name="toolTip">
+    <string>Examine the selected file: page layout, ECC scheme and error counts. Does not touch the device.</string>
+   </property>
+  </action>
+  <action name="actionEcc">
+   <property name="text">
+    <string>ECC...</string>
+   </property>
+   <property name="toolTip">
+    <string>Error correction applied by this application when reading and writing</string>
    </property>
   </action>
     <action name="actionVerify">

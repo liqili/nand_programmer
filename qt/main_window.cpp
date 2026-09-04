@@ -6,6 +6,8 @@
 #include "main_window.h"
 #include "ui_main_window.h"
 #include "settings_programmer_dialog.h"
+#include "ecc_settings_dialog.h"
+#include "ecc/image_probe.h"
 #include "parallel_chip_db_dialog.h"
 #include "spi_chip_db_dialog.h"
 #include "parallel_serial_chip_db_dialog.h"
@@ -33,6 +35,43 @@
 #define CHIP_INDEX_DEFAULT 0
 #define CHIP_INDEX2ID(index) (index - 1)
 #define CHIP_ID2INDEX(id) (id + 1)
+
+/* Adapter so the image probe can read straight from the work file instead of
+ * pulling a whole chip image into memory.
+ */
+static bool workFileRead(void *ctx, uint64_t offset, uint8_t *buf, size_t len)
+{
+    QFile *f = static_cast<QFile *>(ctx);
+
+    if (!f->seek(static_cast<qint64>(offset)))
+        return false;
+
+    return f->read(reinterpret_cast<char *>(buf),
+        static_cast<qint64>(len)) == static_cast<qint64>(len);
+}
+
+/* Geometry of the chip the user has selected. spare is what is left of the
+ * extended page once the data page is taken off. Returns false when nothing
+ * is selected yet.
+ */
+static bool selectedGeometry(ChipDb *db, const QString &name, int &page,
+    int &spare, int &bbMark)
+{
+    if (!db || name.isEmpty())
+        return false;
+
+    const uint32_t p = db->pageSizeGetByName(name);
+    const uint32_t e = db->extendedPageSizeGetByName(name);
+
+    if (!p)
+        return false;
+
+    page = static_cast<int>(p);
+    spare = e > p ? static_cast<int>(e - p) : 0;
+    bbMark = db->bbMarkOffsetGetByName(name);
+
+    return true;
+}
 
 void MainWindow::initBufTable()
 {
@@ -68,6 +107,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent),
 
     prog = new Programmer(this);
     updateProgSettings();
+    updateEccSettings();
 
     updateChipList();
 
@@ -90,6 +130,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent),
         SLOT(slotProgReadBadBlocks()));
     connect(ui->actionProgrammer, SIGNAL(triggered()), this,
         SLOT(slotSettingsProgrammer()));
+    connect(ui->actionEcc, SIGNAL(triggered()), this,
+        SLOT(slotSettingsEcc()));
+    connect(ui->actionCheckImage, SIGNAL(triggered()), this,
+        SLOT(slotCheckImage()));
     connect(ui->actionParallelChipDb, SIGNAL(triggered()), this,
         SLOT(slotSettingsParallelChipDb()));
     connect(ui->actionSpiChipDb, SIGNAL(triggered()), this,
@@ -137,6 +181,7 @@ void MainWindow::setUiStateSelected(bool isSelected)
     ui->actionWrite->setEnabled(isSelected);
     ui->actionVerify->setEnabled(isSelected);
     ui->actionReadBadBlocks->setEnabled(isSelected);
+    ui->actionCheckImage->setEnabled(isSelected);
 
     ui->firstSpinBox->setEnabled(isSelected);
     ui->lastSpinBox->setEnabled(isSelected);
@@ -264,6 +309,65 @@ void MainWindow::slotProgErase()
     prog->eraseChip(start_address, areaSize);
 }
 
+EccMode MainWindow::readEccMode() const
+{
+    if (!eccEngine.isEnabled())
+        return ECC_MODE_RAW;
+
+    return eccCorrectOnRead ? ECC_MODE_CORRECT : ECC_MODE_CHECK;
+}
+
+void MainWindow::flushReadBuffer(bool final)
+{
+    std::vector<uint8_t> out;
+
+    buffer.mutex.lock();
+    if (!buffer.buf.empty())
+    {
+        eccStream.push(&buffer.buf[0], buffer.buf.size(), out, eccStats);
+        buffer.buf.clear();
+    }
+    buffer.mutex.unlock();
+
+    if (final)
+        eccStream.end(out, eccStats);
+
+    if (!out.empty())
+    {
+        workFile.write(reinterpret_cast<const char *>(&out[0]),
+            static_cast<qint64>(out.size()));
+    }
+}
+
+void MainWindow::reportEccStats()
+{
+    if (!eccStats.stepsTotal)
+        return;
+
+    qInfo() << QString::fromStdString(eccStats.summary());
+
+    if (eccStats.stepsUncorrectable)
+    {
+        const QString msg = tr("ECC: %1 step(s) could not be corrected, first "
+            "at page %2").arg(eccStats.stepsUncorrectable)
+            .arg(eccStats.firstFailPage);
+
+        if (eccWarnUncorrectable)
+            qCritical() << msg;
+        else
+            qInfo() << msg;
+    }
+    else if (eccStats.wearWarning(eccEngine.scheme()))
+    {
+        /* Still readable, but one more flip in the same step would not be.
+         * Worth saying before the data is actually lost.
+         */
+        qWarning() << tr("ECC: worst step needed %1 of %2 correctable bits. "
+            "These blocks are wearing out; consider rewriting them.")
+            .arg(eccStats.worstStep).arg(eccEngine.scheme().correctableBits());
+    }
+}
+
 void MainWindow::slotProgReadCompleted(quint64 readBytes)
 {
     disconnect(prog, SIGNAL(readChipProgress(quint64)), this,
@@ -282,10 +386,8 @@ void MainWindow::slotProgReadCompleted(quint64 readBytes)
         return;
     }
 
-    buffer.mutex.lock();
-    workFile.write((const char *)buffer.buf.data(), buffer.buf.size());
-    buffer.buf.clear();
-    buffer.mutex.unlock();
+    flushReadBuffer(true);
+    reportEccStats();
 
     if (readBytes != (quint64)workFile.size())
     {
@@ -306,10 +408,7 @@ void MainWindow::slotProgReadProgress(quint64 progress)
     progressPercent = progress * 100ULL / areaSize;
     setProgress(progressPercent);
 
-    buffer.mutex.lock();
-    workFile.write((const char *)buffer.buf.data(), buffer.buf.size());
-    buffer.buf.clear();
-    buffer.mutex.unlock();
+    flushReadBuffer(false);
 }
 
 void MainWindow::slotProgRead()
@@ -357,6 +456,20 @@ void MainWindow::slotProgRead()
     qInfo() << "Reading data ...";
     setProgress(0);
 
+    /* Arm the ECC stream for this transfer. With no scheme bound, or with
+     * correction switched off, this is a pass through and the file receives
+     * exactly what the chip returned.
+     */
+    eccStats.reset();
+    eccStream.begin(&eccEngine, eccEngine.pageBytes(), readEccMode());
+
+    if (eccEngine.isEnabled())
+    {
+        qInfo() << (eccCorrectOnRead ?
+            "ECC: checking and correcting -" : "ECC: checking only -") <<
+            QString::fromStdString(eccEngine.strengthText());
+    }
+
     connect(prog, SIGNAL(readChipCompleted(quint64)), this,
         SLOT(slotProgReadCompleted(quint64)));
     connect(prog, SIGNAL(readChipProgress(quint64)), this,
@@ -382,6 +495,13 @@ void MainWindow::slotProgVerifyCompleted(quint64 readBytes)
     workFile.close();
     buffer.buf.clear();
 
+    if (eccStats.stepsTotal)
+    {
+        qInfo() << "Verify is byte exact; the ECC figures below describe the "
+            "state of the data on the chip, they do not change the verdict.";
+        reportEccStats();
+    }
+
     qInfo() << readBytes << " bytes read. Verify end."  ;
 }
 
@@ -395,6 +515,17 @@ void MainWindow::slotProgVerifyProgress(quint64 progress)
     QVector<uint8_t> cmpBuffer;
     buffer.mutex.lock();
     cmpBuffer.resize(buffer.buf.size());
+
+    /* Run the parity check over what the chip returned, for reporting only.
+     * The verdict below stays a byte for byte comparison: a page that was
+     * written badly but is still correctable must not be allowed to compare
+     * equal, or the write failure is hidden.
+     */
+    if (!buffer.buf.empty())
+    {
+        std::vector<uint8_t> discard;
+        eccStream.push(&buffer.buf[0], buffer.buf.size(), discard, eccStats);
+    }
 
     qint64 readSize = workFile.read((char *)cmpBuffer.data(), buffer.buf.size());
 
@@ -482,6 +613,13 @@ void MainWindow::slotProgVerify()
 
     qInfo() << "Reading data ...";
     setProgress(0);
+
+    /* Always CHECK here, never CORRECT: verify compares what is actually on
+     * the chip, so repairing the bytes first would compare a repaired copy
+     * against the file and pass a page that was written badly.
+     */
+    eccStats.reset();
+    eccStream.begin(&eccEngine, eccEngine.pageBytes(), ECC_MODE_CHECK);
 
     connect(prog, SIGNAL(readChipCompleted(quint64)), this,
             SLOT(slotProgVerifyCompleted(quint64)));
@@ -580,6 +718,58 @@ void MainWindow::slotProgWrite()
     quint64 start_address =
             ui->blockSizeValueLabel->text().toULongLong(nullptr, 16)
             * ui->firstSpinBox->value();
+
+    /* Work out what the image actually is before sending any of it. Writing a
+     * data only image while the transfer carries the spare area shifts every
+     * page by the spare size: data lands in spare areas, bad block markers are
+     * overwritten, and the chip ends up garbage with no warning at any point.
+     */
+    {
+        int dataPage = 0, spare = 0, bbMark = -1;
+
+        if (selectedGeometry(currentChipDb, chipName, dataPage, spare, bbMark)
+            && spare > 0)
+        {
+            const ImageProbeResult probe = ImageProbe::probe(workFileRead,
+                &workFile, static_cast<quint64>(workFile.size()), dataPage,
+                spare, bbMark);
+            const bool haveSpare = probe.layout == IMAGE_LAYOUT_PAGE_SPARE;
+
+            workFile.seek(0);
+            qInfo() << "Image:" << QString::fromStdString(probe.reason);
+
+            if (prog->isIncSpare() && !haveSpare)
+            {
+                qCritical() << tr("This image has no spare area, but the "
+                    "transfer includes it. Writing it would shift every page "
+                    "by %1 bytes and destroy the bad block markers. Generate "
+                    "the spare area first, or turn off \"Include spare "
+                    "area\".").arg(spare);
+                workFile.close();
+                return;
+            }
+
+            if (!prog->isIncSpare() && haveSpare)
+            {
+                qCritical() << tr("This image contains a spare area, but the "
+                    "transfer does not. Enable \"Include spare area\" in "
+                    "Programmer settings before writing it.");
+                workFile.close();
+                return;
+            }
+
+            if (probe.foreignBadMarkers)
+            {
+                /* Not fatal, but it marks good blocks bad on the destination
+                 * and cannot be undone, so it must not pass silently.
+                 */
+                qWarning() << tr("Image carries %1 bad block marker(s) from "
+                    "the device it was taken from. Writing it will mark those "
+                    "blocks bad on this chip.")
+                    .arg(probe.foreignBadMarkers);
+            }
+        }
+    }
 
     areaSize = workFile.size();
 
@@ -852,6 +1042,273 @@ void MainWindow::slotSettingsProgrammer()
 
         updateProgSettings();
     }
+}
+
+/* Examine the file the user has selected without touching the device: what
+ * layout it is in, whether it already carries parity, which scheme that parity
+ * belongs to, and how healthy it is. Useful before writing, and useful on its
+ * own for judging a dump.
+ */
+void MainWindow::slotCheckImage()
+{
+    QFile file(ui->filePathLineEdit->text());
+    int dataPage = 0, spare = 0, bbMark = -1;
+
+    if (ui->chipSelectComboBox->currentIndex() <= CHIP_INDEX_DEFAULT ||
+        !selectedGeometry(currentChipDb, ui->chipSelectComboBox->currentText(),
+        dataPage, spare, bbMark))
+    {
+        qInfo() << "Select a chip first: the check needs its page geometry";
+        return;
+    }
+
+    if (!file.open(QIODevice::ReadOnly) || !file.size())
+    {
+        qCritical() << "Cannot read" << file.fileName();
+        return;
+    }
+
+    const ImageProbeResult probe = ImageProbe::probe(workFileRead, &file,
+        static_cast<quint64>(file.size()), dataPage, spare, bbMark);
+
+    qInfo() << "Image:" << file.fileName() << file.size() << "bytes";
+    qInfo() << "Layout:" << (probe.layout == IMAGE_LAYOUT_PAGE_SPARE ?
+        "page + spare" : probe.layout == IMAGE_LAYOUT_DATA_ONLY ?
+        "data only, no spare area" : "unrecognised") <<
+        QString("(confidence %1%)").arg(probe.confidence);
+    qInfo() << QString::fromStdString(probe.reason);
+    qInfo() << QString("%1 whole page(s)%2").arg(probe.fullPages)
+        .arg(probe.trailingBytes ?
+            QString(", plus %1 trailing byte(s)").arg(probe.trailingBytes) :
+            QString());
+
+    if (probe.foreignBadMarkers)
+    {
+        qWarning() << QString("Carries %1 bad block marker(s) from the device "
+            "it came from; writing it would mark those blocks bad here.")
+            .arg(probe.foreignBadMarkers);
+    }
+
+    if (probe.layout != IMAGE_LAYOUT_PAGE_SPARE)
+    {
+        file.close();
+        return;
+    }
+
+    if (probe.spareBlank)
+    {
+        qInfo() << "Spare area is present but empty; no parity to check.";
+        file.close();
+        return;
+    }
+
+    /* Check the whole file with whichever scheme was recognised, falling back
+     * to the one configured in the ECC dialog.
+     */
+    EccEngine eng;
+    std::string why;
+    const EccScheme s = probe.matchingPreset >= 0 ?
+        EccScheme::preset(probe.matchingPreset) : eccScheme;
+
+    if (s.algo == ECC_ALGO_NONE ||
+        !eng.setScheme(s, dataPage, spare, bbMark, why))
+    {
+        qInfo() << "No ECC scheme to check with." <<
+            (why.empty() ? "" : QString::fromStdString(why));
+        file.close();
+        return;
+    }
+
+    EccPageStream stream;
+    EccStats stats;
+    std::vector<uint8_t> chunk(64 * 1024), out;
+
+    stream.begin(&eng, eng.pageBytes(), ECC_MODE_CHECK);
+
+    for (;;)
+    {
+        const qint64 n = file.read(reinterpret_cast<char *>(&chunk[0]),
+            static_cast<qint64>(chunk.size()));
+
+        if (n <= 0)
+            break;
+
+        out.clear();
+        stream.push(&chunk[0], static_cast<size_t>(n), out, stats);
+    }
+
+    out.clear();
+    stream.end(out, stats);
+    file.close();
+
+    qInfo() << QString::fromStdString(stats.summary());
+
+    if (stats.stepsUncorrectable)
+    {
+        qCritical() << QString("%1 step(s) are beyond repair, first at page %2")
+            .arg(stats.stepsUncorrectable).arg(stats.firstFailPage);
+    }
+    else if (stats.wearWarning(s))
+    {
+        qWarning() << QString("Worst step needed %1 of %2 correctable bits; "
+            "this image came off blocks that are wearing out.")
+            .arg(stats.worstStep).arg(s.correctableBits());
+    }
+}
+
+void MainWindow::slotSettingsEcc()
+{
+    EccSettingsDialog eccDialog(this);
+    QSettings settings(SETTINGS_ORGANIZATION_NAME, SETTINGS_APPLICATION_NAME);
+    int page = 0, spare = 0, bbMark = -1;
+
+    if (ui->chipSelectComboBox->currentIndex() > 0 &&
+        selectedGeometry(currentChipDb, ui->chipSelectComboBox->currentText(),
+        page, spare, bbMark))
+    {
+        eccDialog.setChipGeometry(page, spare, bbMark);
+    }
+
+    eccDialog.setSpareIncluded(prog->isIncSpare());
+
+    {
+    }
+
+    /* Start from the stored layout, falling back to the Broadcom BCH-4 preset
+     * the first time the dialog is opened.
+     */
+    EccScheme s = EccScheme::preset(1);
+
+    s.algo = static_cast<EccAlgorithm>(settings.value(SETTINGS_ECC_ALGO,
+        s.algo).toInt());
+    s.sectorSize = settings.value(SETTINGS_ECC_SECTOR_SIZE,
+        s.sectorSize).toInt();
+    s.oobSize = settings.value(SETTINGS_ECC_OOB_SIZE, s.oobSize).toInt();
+    s.eccBitOffset = settings.value(SETTINGS_ECC_BIT_OFFSET,
+        s.eccBitOffset).toInt();
+    s.coverSpare = settings.value(SETTINGS_ECC_COVER_SPARE,
+        s.coverSpare).toBool();
+    s.m = settings.value(SETTINGS_ECC_M, s.m).toInt();
+    s.t = settings.value(SETTINGS_ECC_T, s.t).toInt();
+    s.primPoly = settings.value(SETTINGS_ECC_PRIM_POLY, s.primPoly).toUInt();
+    s.truncateTopBits = settings.value(SETTINGS_ECC_TRUNCATE,
+        s.truncateTopBits).toInt();
+
+    eccDialog.setScheme(s);
+    eccDialog.setEccEnabled(settings.value(SETTINGS_ECC_ENABLED,
+        false).toBool());
+    eccDialog.setCorrectOnRead(settings.value(SETTINGS_ECC_CORRECT_ON_READ,
+        true).toBool());
+    eccDialog.setGenerateOnWrite(settings.value(SETTINGS_ECC_GENERATE_ON_WRITE,
+        true).toBool());
+    eccDialog.setStopOnUncorrectable(settings.value(
+        SETTINGS_ECC_WARN_UNCORRECTABLE, true).toBool());
+
+    if (eccDialog.exec() == QDialog::Accepted)
+    {
+        const EccScheme n = eccDialog.scheme();
+
+        settings.setValue(SETTINGS_ECC_ENABLED, eccDialog.isEccEnabled());
+        settings.setValue(SETTINGS_ECC_ALGO, static_cast<int>(n.algo));
+        settings.setValue(SETTINGS_ECC_SECTOR_SIZE, n.sectorSize);
+        settings.setValue(SETTINGS_ECC_OOB_SIZE, n.oobSize);
+        settings.setValue(SETTINGS_ECC_BIT_OFFSET, n.eccBitOffset);
+        settings.setValue(SETTINGS_ECC_COVER_SPARE, n.coverSpare);
+        settings.setValue(SETTINGS_ECC_M, n.m);
+        settings.setValue(SETTINGS_ECC_T, n.t);
+        settings.setValue(SETTINGS_ECC_PRIM_POLY, n.primPoly);
+        settings.setValue(SETTINGS_ECC_TRUNCATE, n.truncateTopBits);
+        settings.setValue(SETTINGS_ECC_CORRECT_ON_READ,
+            eccDialog.isCorrectOnRead());
+        settings.setValue(SETTINGS_ECC_GENERATE_ON_WRITE,
+            eccDialog.isGenerateOnWrite());
+        settings.setValue(SETTINGS_ECC_WARN_UNCORRECTABLE,
+            eccDialog.isStopOnUncorrectable());
+        settings.sync();
+
+        updateEccSettings();
+    }
+}
+
+void MainWindow::updateEccSettings()
+{
+    QSettings settings(SETTINGS_ORGANIZATION_NAME, SETTINGS_APPLICATION_NAME);
+    EccScheme s = EccScheme::preset(1);
+
+    s.algo = static_cast<EccAlgorithm>(settings.value(SETTINGS_ECC_ALGO,
+        s.algo).toInt());
+    s.sectorSize = settings.value(SETTINGS_ECC_SECTOR_SIZE,
+        s.sectorSize).toInt();
+    s.oobSize = settings.value(SETTINGS_ECC_OOB_SIZE, s.oobSize).toInt();
+    s.eccBitOffset = settings.value(SETTINGS_ECC_BIT_OFFSET,
+        s.eccBitOffset).toInt();
+    s.coverSpare = settings.value(SETTINGS_ECC_COVER_SPARE,
+        s.coverSpare).toBool();
+    s.m = settings.value(SETTINGS_ECC_M, s.m).toInt();
+    s.t = settings.value(SETTINGS_ECC_T, s.t).toInt();
+    s.primPoly = settings.value(SETTINGS_ECC_PRIM_POLY, s.primPoly).toUInt();
+    s.truncateTopBits = settings.value(SETTINGS_ECC_TRUNCATE,
+        s.truncateTopBits).toInt();
+
+    /* The layout is kept as configured even when ECC is switched off, so the
+     * user does not have to type it again; only the effective scheme handed to
+     * the engine is neutered.
+     */
+    if (!settings.value(SETTINGS_ECC_ENABLED, false).toBool())
+        s.algo = ECC_ALGO_NONE;
+
+    eccScheme = s;
+    eccCorrectOnRead = settings.value(SETTINGS_ECC_CORRECT_ON_READ,
+        true).toBool();
+    eccGenerateOnWrite = settings.value(SETTINGS_ECC_GENERATE_ON_WRITE,
+        true).toBool();
+    eccWarnUncorrectable = settings.value(SETTINGS_ECC_WARN_UNCORRECTABLE,
+        true).toBool();
+
+    rebindEcc();
+}
+
+bool MainWindow::rebindEcc()
+{
+    std::string why;
+    int page = 0, spare = 0, bbMark = -1;
+
+    if (eccScheme.algo == ECC_ALGO_NONE ||
+        ui->chipSelectComboBox->currentIndex() <= 0 ||
+        !selectedGeometry(currentChipDb, ui->chipSelectComboBox->currentText(),
+        page, spare, bbMark))
+    {
+        eccEngine = EccEngine();
+        return true;
+    }
+
+    /* Parity lives in the spare area, so the host has to be receiving it. With
+     * "include spare area" off the transfer carries data bytes only, and
+     * anything the engine did would be computed over the wrong bytes.
+     */
+    if (!prog->isIncSpare())
+    {
+        eccEngine = EccEngine();
+        qInfo() << "ECC not applied: enable \"Include spare area\" in "
+            "Programmer settings, the parity lives there";
+        return false;
+    }
+
+    if (!eccEngine.setScheme(eccScheme, page, spare, bbMark, why))
+    {
+        /* Refuse to apply a layout that does not fit rather than silently
+         * mangling the spare area of a real device.
+         */
+        eccEngine = EccEngine();
+        qInfo() << "ECC not applied to this chip:" <<
+            QString::fromStdString(why);
+        return false;
+    }
+
+    qInfo() << "ECC:" << QString::fromStdString(eccEngine.strengthText()) <<
+        "over" << eccEngine.sectorsPerPage() << "sectors per page";
+
+    return true;
 }
 
 void MainWindow::updateProgSettings()

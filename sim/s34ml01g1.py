@@ -44,7 +44,14 @@ except NameError:
     CMD_RESET = 0xFF
 
     STATUS_READY = 0x40
+    STATUS_FAIL = 0x01
     BUSY_READS = 2
+
+    # Programs aimed at this block are reported as failing, so the firmware's
+    # retire-the-block path can be exercised. Real silicon does this when a
+    # page will no longer hold charge; there is no other way to reach that
+    # code without a worn out device.
+    FAIL_BLOCK = 6
 
     DATA_AREA = 0x00000
     CMD_AREA = 0x10000
@@ -60,6 +67,7 @@ except NameError:
     ptr = 0
     busy_left = 0
     id_idx = 0
+    op_failed = False
 
     violations = []
     widths = {}
@@ -94,13 +102,15 @@ def _page(n):
 
 
 def _read_byte():
-    global busy_left, id_idx, ptr
+    global busy_left, id_idx, ptr, op_failed
 
     if phase == "status":
         if busy_left > 0:
             busy_left -= 1
             return 0x00
-        return STATUS_READY
+        # Bit 0 set alongside ready is how a device reports that the last
+        # program or erase did not take.
+        return STATUS_READY | (STATUS_FAIL if op_failed else 0)
 
     if phase == "read_id":
         if addr_cnt != 1:
@@ -191,10 +201,20 @@ elif request.IsWrite:
         elif val == CMD_PROGRAM_2:
             if phase not in ("program_data", "program_addr"):
                 _violate("program confirm without a program setup")
+            elif row // PAGES_PER_BLOCK == FAIL_BLOCK:
+                # Leave the page as it was and report failure.
+                op_failed = True
+                busy_left = BUSY_READS
+                phase = "status"
+                _say("[chip] program page row=%d REFUSED (block %d)"
+                     % (row, FAIL_BLOCK))
             else:
                 tgt = _page(row)
                 for i in range(PAGE_TOTAL):
+                    # Programming only clears bits; it can never set one back
+                    # to 1. Marking a block bad relies on exactly this.
                     tgt[i] &= page_buf[i]
+                op_failed = False
                 busy_left = BUSY_READS
                 phase = "status"
                 _say("[chip] program page row=%d" % row)
@@ -210,6 +230,7 @@ elif request.IsWrite:
                 base = row - (row % PAGES_PER_BLOCK)
                 for i in range(PAGES_PER_BLOCK):
                     pages[base + i] = [0xFF] * PAGE_TOTAL
+                op_failed = False
                 busy_left = BUSY_READS
                 phase = "status"
                 _say("[chip] erase block at row=%d (%d address cycles)"

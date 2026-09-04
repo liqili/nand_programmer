@@ -299,6 +299,13 @@ uint32_t ChipDb::pageSizeGetByName(const QString &name)
     return info ? info->getPageSize() : 0;
 }
 
+int ChipDb::bbMarkOffsetGetByName(const QString &name)
+{
+    ChipInfo *info = chipInfoGetByName(name);
+
+    return info ? static_cast<int>(info->getBBMarkOffset()) : -1;
+}
+
 uint32_t ChipDb::extendedPageSizeGetById(int id)
 {
     ChipInfo *info = chipInfoGetById(id);

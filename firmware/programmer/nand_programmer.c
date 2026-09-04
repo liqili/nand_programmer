@@ -236,6 +236,11 @@ typedef struct
     uint64_t total_size;
     int addr_is_set;
     int bb_is_read;
+    /* Page handed to the last asynchronous write. The caller advances
+     * prog->page.page as soon as the write is issued, so by the time the
+     * status comes back it no longer points at the page that failed.
+     */
+    uint32_t wr_page;
     int chip_is_conf;
     np_page_t page;
     uint64_t bytes_written;
@@ -422,6 +427,46 @@ Exit:
     return 0;
 }
 
+/* Retire a block: write the factory marker to zero and record it in the table.
+ *
+ * Programming can only clear bits, so a buffer of 0xFF with the single marker
+ * byte zeroed leaves every other byte of the page as it was. ONFI asks a host
+ * to do this whenever a program or erase fails, so that the block is never
+ * used again.
+ */
+static int np_nand_mark_bad(np_prog_t *prog, uint32_t page)
+{
+    uint32_t pages_per_block = prog->chip_info.block_size /
+        prog->chip_info.page_size;
+    uint32_t block_page, len, timeout;
+
+    if (!pages_per_block)
+        return -1;
+
+    block_page = page - (page % pages_per_block);
+    len = prog->chip_info.page_size + prog->chip_info.spare_size;
+
+    nand_bad_block_table_add(block_page);
+
+    memset(prog->page.buf, 0xFF, len);
+    prog->page.buf[prog->chip_info.page_size + prog->chip_info.bb_mark_off] = 0;
+
+    hal[prog->hal]->write_page_async(prog->page.buf, block_page, len);
+
+    for (timeout = 0; timeout < NP_NAND_TIMEOUT; timeout++)
+    {
+        if (hal[prog->hal]->read_status() != FLASH_STATUS_BUSY)
+            break;
+    }
+
+    prog->nand_wr_in_progress = 0;
+
+    ERROR_PRINT("Marked block at page %lu bad\r\n",
+        (unsigned long)block_page);
+
+    return 0;
+}
+
 static int np_nand_erase(np_prog_t *prog, uint32_t page)
 {
     uint32_t status;
@@ -437,6 +482,10 @@ static int np_nand_erase(np_prog_t *prog, uint32_t page)
     case FLASH_STATUS_ERROR:
         if (np_send_bad_block_info(addr, prog->chip_info.block_size, false))
             return -1;
+        /* A block that will not erase is finished; mark it so it is skipped
+         * from now on rather than being handed data again.
+         */
+        np_nand_mark_bad(prog, page);
         break;
     case FLASH_STATUS_TIMEOUT:
         ERROR_PRINT("NAND erase timeout at 0x%" PRIx64 "\r\n", addr);
@@ -678,9 +727,27 @@ static int np_nand_handle_status(np_prog_t *prog)
     switch (hal[prog->hal]->read_status())
     {
     case FLASH_STATUS_ERROR:
-        if (np_send_bad_block_info(prog->addr, prog->block_size, false))
+        /* The page that failed is wr_page, not prog->page.page, which the
+         * caller has already advanced.
+         */
+        ERROR_PRINT("NAND write failed at page %lu\r\n",
+            (unsigned long)prog->wr_page);
+
+        if (np_send_bad_block_info((uint64_t)prog->wr_page *
+            prog->chip_info.page_size, prog->block_size, false))
+        {
             return -1;
-        /* fall through */
+        }
+
+        /* Retire the block and stop. Carrying on would leave this block's
+         * data silently lost while the operation still reported success, and
+         * the firmware cannot re-place it: relocating means rewriting a whole
+         * block, which it has no room to buffer.
+         */
+        np_nand_mark_bad(prog, prog->wr_page);
+        prog->nand_wr_in_progress = 0;
+        prog->nand_timeout = 0;
+        return -1;
     case FLASH_STATUS_READY:
         prog->nand_wr_in_progress = 0;
         prog->nand_timeout = 0;
@@ -720,6 +787,7 @@ static int np_nand_write(np_prog_t *prog)
     DEBUG_PRINT("NAND write at 0x%" PRIx64 " %lu bytes\r\n", prog->addr,
         prog->page_size);
 
+    prog->wr_page = prog->page.page;
     hal[prog->hal]->write_page_async(prog->page.buf, prog->page.page,
         prog->page_size);
 
@@ -1095,7 +1163,13 @@ static int np_cmd_nand_conf(np_prog_t *prog)
         return NP_ERR_LEN_INVALID;
     }
 
-    nand_bad_block_table_init();
+    if (nand_bad_block_table_init(prog->chip_info.block_size /
+        prog->chip_info.page_size,
+        (uint32_t)(prog->chip_info.total_size / prog->chip_info.block_size)))
+    {
+        ERROR_PRINT("Chip has more blocks than the bad block table holds\r\n");
+        return NP_ERR_BBT_OVERFLOW;
+    }
     prog->bb_is_read = 0;
 
     return np_send_ok_status();
@@ -1103,11 +1177,9 @@ static int np_cmd_nand_conf(np_prog_t *prog)
 
 static int np_send_bad_blocks(np_prog_t *prog)
 {
-    uint32_t page;
-    void *bb_iter;
+    uint32_t page, bb_iter = 0;
 
-    for (bb_iter = nand_bad_block_table_iter_alloc(&page); bb_iter;
-        bb_iter = nand_bad_block_table_iter_next(bb_iter, &page))
+    while (nand_bad_block_table_iter(&bb_iter, &page))
     {
         if (np_send_bad_block_info(page * prog->chip_info.page_size,
             prog->chip_info.block_size, false))
@@ -1124,7 +1196,9 @@ int np_cmd_read_bad_blocks(np_prog_t *prog)
     int ret;
 
     led_rd_set(true);
-    nand_bad_block_table_init();  
+    nand_bad_block_table_init(prog->chip_info.block_size /
+        prog->chip_info.page_size,
+        (uint32_t)(prog->chip_info.total_size / prog->chip_info.block_size));
     ret = _np_cmd_read_bad_blocks(prog, true);
     led_rd_set(false);
 
