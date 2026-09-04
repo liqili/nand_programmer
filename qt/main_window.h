@@ -9,6 +9,8 @@
 #include "programmer.h"
 #include "parallel_chip_db.h"
 #include "spi_chip_db.h"
+#include "parallel_serial_chip_db.h"
+#include "ecc/ecc_stream.h"
 #include <QMainWindow>
 #include <QVector>
 #include <QElapsedTimer>
@@ -32,12 +34,25 @@ private:
     ChipId chipId;
     ParallelChipDb parallelChipDb;
     SpiChipDb spiChipDb;
+    ParallelSerialChipDb parallelSerialChipDb;
     ChipDb *currentChipDb;
     QElapsedTimer timer;
     bool isAlertEnabled;
     QFile workFile;
     quint64 areaSize;
     uint32_t pageSize;
+
+    /* Software ECC applied on this side of the USB link. The scheme is what
+     * the user configured; the engine is that scheme bound to the geometry of
+     * the chip currently selected.
+     */
+    EccScheme eccScheme;
+    EccEngine eccEngine;
+    EccPageStream eccStream;
+    EccStats eccStats;
+    bool eccCorrectOnRead;
+    bool eccGenerateOnWrite;
+    bool eccWarnUncorrectable;
 
     void initBufTable();
     void resetBufTable();
@@ -46,6 +61,20 @@ private:
     void updateChipList();
     void setProgress(unsigned int progress);
     void updateProgSettings();
+    void updateEccSettings();
+    /* Rebind the engine to the selected chip. Returns false and reports why
+     * when the configured scheme does not fit its geometry.
+     */
+    bool rebindEcc();
+    /* How pages read from the chip should be treated, given the settings and
+     * whether the engine is bound to this chip at all.
+     */
+    EccMode readEccMode() const;
+    /* Move whatever the reader has produced into the work file, through the
+     * ECC stream when one is active.
+     */
+    void flushReadBuffer(bool final);
+    void reportEccStats();
     void detectChip(ChipDb *chipDb);
     void detectChipReadChipIdDelayed();
     void detectChipDelayed();
@@ -82,8 +111,11 @@ public slots:
     void slotSelectChip(int selectedChipNum);
     void slotDetectChip();
     void slotSettingsProgrammer();
+    void slotSettingsEcc();
+    void slotCheckImage();
     void slotSettingsParallelChipDb();
     void slotSettingsSpiChipDb();
+    void slotSettingsParallelSerialChipDb();
     void slotAboutDialog();
     void slotFirmwareUpdateDialog();
 };

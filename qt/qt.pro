@@ -39,13 +39,26 @@ SOURCES += main.cpp\
     spi_chip_db_dialog.cpp \
     spi_chip_db_table_model.cpp \
     spi_chip_info.cpp \
+    parallel_serial_chip_db.cpp \
+    parallel_serial_chip_db_dialog.cpp \
+    parallel_serial_chip_db_table_model.cpp \
+    parallel_serial_chip_info.cpp \
     writer.cpp \
     reader.cpp \
     settings_programmer_dialog.cpp \
     err.cpp \
     about_dialog.cpp \
     firmware_update_dialog.cpp \
-    clickcombobox.cpp
+    clickcombobox.cpp \
+    ecc_settings_dialog.cpp \
+    ecc/gf.cpp \
+    ecc/bch_codec.cpp \
+    ecc/hamming_codec.cpp \
+    ecc/rs_codec.cpp \
+    ecc/ecc_scheme.cpp \
+    ecc/ecc_engine.cpp \
+    ecc/ecc_stream.cpp \
+    ecc/image_probe.cpp
 
 HEADERS += main_window.h \
     chip_db.h \
@@ -63,6 +76,10 @@ HEADERS += main_window.h \
     spi_chip_db_dialog.h \
     spi_chip_db_table_model.h \
     spi_chip_info.h \
+    parallel_serial_chip_db.h \
+    parallel_serial_chip_db_dialog.h \
+    parallel_serial_chip_db_table_model.h \
+    parallel_serial_chip_info.h \
     sync_buffer.h \
     writer.h \
     reader.h \
@@ -72,14 +89,24 @@ HEADERS += main_window.h \
     version.h \
     firmware_update_dialog.h \
     settings.h \
-    clickcombobox.h
+    clickcombobox.h \
+    ecc_settings_dialog.h \
+    ecc/gf.h \
+    ecc/bch_codec.h \
+    ecc/hamming_codec.h \
+    ecc/rs_codec.h \
+    ecc/ecc_scheme.h \
+    ecc/ecc_engine.h \
+    ecc/ecc_stream.h \
+    ecc/image_probe.h
 
 FORMS += main_window.ui \
     parallel_chip_db_dialog.ui \
     settings_programmer_dialog.ui \
     about_dialog.ui \
     firmware_update_dialog.ui \
-    spi_chip_db_dialog.ui
+    spi_chip_db_dialog.ui \
+    parallel_serial_chip_db_dialog.ui
 
 QMAKE_CXXFLAGS += -std=c++11 -Wextra -Werror
 mingw:QMAKE_CXXFLAGS += -mno-ms-bitfields
@@ -97,11 +124,13 @@ win32: {
 
 DISTFILES += \
     nando_parallel_chip_db.csv \
-    nando_spi_chip_db.csv
+    nando_spi_chip_db.csv \
+    nando_parallel_serial_chip_db.csv
 
 install_conf.path = $$DESTDIR
 install_conf.files += $$PWD/nando_parallel_chip_db.csv \
-    $$PWD/nando_spi_chip_db.csv
+    $$PWD/nando_spi_chip_db.csv \
+    $$PWD/nando_parallel_serial_chip_db.csv
 
 INSTALLS += install_conf
 

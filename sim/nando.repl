@@ -1,0 +1,14 @@
+// Copyright (C) 2020 NANDO authors
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License version 3.
+//
+// STM32F103 with the S34ML01G1 NAND flash on FSMC NAND bank 2.
+// The stock platform maps FSMC bank 1 only, bank 2 at 0x70000000 is where
+// the programmer's ZIF socket lives.
+
+using "platforms/cpus/stm32f103.repl"
+
+nand: Python.PythonPeripheral @ sysbus <0x70000000, +0x40000>
+    size: 0x40000
+    initable: true
+    filename: "/repo/sim/s34ml01g1.py"

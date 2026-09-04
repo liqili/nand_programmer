@@ -1,0 +1,42 @@
+:name: NANDO S34ML01G1 simulation
+:description: Runs the NAND driver against a modelled S34ML01G1 on an STM32F103.
+
+$fw ?= @/repo/sim/sim_fw.elf
+
+mach create "nando"
+
+machine LoadPlatformDescription @/repo/sim/nando.repl
+
+# USART1 carries the simulation results
+sysbus.usart1 CreateFileBackend @/repo/sim/out/uart1.log true
+
+sysbus LoadELF $fw
+
+# Application 1 links at 0x08004000, after the bootloader (see the MEMORY
+# block in stm32_flash_1.ld). The first LOAD segment starts at file offset 0,
+# so 0x08000000 holds the ELF header rather than the vector table.
+cpu VectorTableOffset 0x08004000
+
+# The stock platform tags RCC_CR (returning 0x0A020083, ready bits set) but
+# leaves RCC_CFGR unimplemented, so SystemInit() spins waiting for SWS to show
+# the PLL as system clock. 0x0A gives SW = PLL and SWS = PLL.
+sysbus Tag <0x40021004, 0x40021007> "RCC_CFGR" 0x0000000A
+sysbus Tag <0x40022000, 0x40022003> "FLASH_ACR" 0x00000030
+
+# Confirm the flash model is mapped at FSMC NAND bank 2
+echo ""
+echo "--- peripherals ---"
+peripherals
+
+# Unmapped-register warnings from the clock tree would otherwise bury the log
+logLevel 3 sysbus
+
+echo ""
+echo "--- running simulation ---"
+
+emulation RunFor "8"
+
+echo "--- simulation window elapsed, final CPU state ---"
+cpu PC
+
+quit

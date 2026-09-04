@@ -5,7 +5,15 @@
 
 #include "fsmc_nand.h"
 #include "log.h"
+
+#ifdef NAND_HOST_TEST
+/* Host test build: SPL peripheral calls are stubbed out and bus accesses
+ * are routed to the flash chip model instead of the FSMC window.
+ */
+#include "nand_host_test.h"
+#else
 #include <stm32f10x.h>
+#endif
 
 #define CMD_AREA                   (uint32_t)(1<<16)  /* A16 = CLE  high */
 #define ADDR_AREA                  (uint32_t)(1<<17)  /* A17 = ALE high */
@@ -33,6 +41,27 @@
     NAND_BLOCK_SIZE)
 
 #define UNDEFINED_CMD 0xFF
+
+#ifndef NAND_HOST_TEST
+/* Every bus access in this driver goes through these two primitives. A16
+ * and A17 of the FSMC window select the command, address or data area.
+ */
+static inline void nand_bus_write(uint32_t area, uint8_t val)
+{
+    *(__IO uint8_t *)(Bank_NAND_ADDR | area) = val;
+}
+
+static inline uint8_t nand_bus_read(uint32_t area)
+{
+    return *(__IO uint8_t *)(Bank_NAND_ADDR | area);
+}
+
+/* Read ID pulls the identifier bytes as 32 bit words */
+static inline uint32_t nand_bus_read32(uint32_t area, uint32_t index)
+{
+    return *((__IO uint32_t *)(Bank_NAND_ADDR | area) + index);
+}
+#endif
 
 typedef struct __attribute__((__packed__))
 {
@@ -148,7 +177,7 @@ static void nand_print_fsmc_info()
 
 static void nand_reset()
 {
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.reset_cmd;
+    nand_bus_write(CMD_AREA, fsmc_conf.reset_cmd);
 }
 
 static int nand_init(void *conf, uint32_t conf_size)
@@ -175,8 +204,8 @@ static uint32_t nand_read_status()
 {
     uint32_t data, status;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.status_cmd;
-    data = *(__IO uint8_t *)(Bank_NAND_ADDR);
+    nand_bus_write(CMD_AREA, fsmc_conf.status_cmd);
+    data = nand_bus_read(DATA_AREA);
 
     if ((data & NAND_ERROR) == NAND_ERROR)
         status = FLASH_STATUS_ERROR;
@@ -211,17 +240,17 @@ static void nand_read_id(chip_id_t *nand_id)
 {
     uint32_t data = 0;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.read_id_cmd;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
+    nand_bus_write(CMD_AREA, fsmc_conf.read_id_cmd);
+    nand_bus_write(ADDR_AREA, 0x00);
 
     /* Sequence to read ID from NAND flash */
-    data = *(__IO uint32_t *)(Bank_NAND_ADDR | DATA_AREA);
+    data = nand_bus_read32(DATA_AREA, 0);
     nand_id->maker_id   = ADDR_1st_CYCLE(data);
     nand_id->device_id  = ADDR_2nd_CYCLE(data);
     nand_id->third_id   = ADDR_3rd_CYCLE(data);
     nand_id->fourth_id  = ADDR_4th_CYCLE(data);
 
-    data = *((__IO uint32_t *)(Bank_NAND_ADDR | DATA_AREA) + 1);
+    data = nand_bus_read32(DATA_AREA, 1);
     nand_id->fifth_id   = ADDR_1st_CYCLE(data);
 }
 
@@ -230,27 +259,27 @@ static void nand_write_page_async(uint8_t *buf, uint32_t page,
 {
     uint32_t i;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.write1_cmd;
+    nand_bus_write(CMD_AREA, fsmc_conf.write1_cmd);
 
     switch (fsmc_conf.col_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
+        nand_bus_write(ADDR_AREA, 0x00);
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = 0x00;
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
+        nand_bus_write(ADDR_AREA, 0x00);
         break;
     default:
         break;
@@ -259,32 +288,32 @@ static void nand_write_page_async(uint8_t *buf, uint32_t page,
     switch (fsmc_conf.row_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_4th_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(page));
         break;
     default:
         break;
     }
 
     for(i = 0; i < page_size; i++)
-        *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA) = buf[i];
+        nand_bus_write(DATA_AREA, buf[i]);
 
     if (fsmc_conf.write2_cmd != UNDEFINED_CMD)
-        *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.write2_cmd;
+        nand_bus_write(CMD_AREA, fsmc_conf.write2_cmd);
 }
 
 static uint32_t nand_read_data(uint8_t *buf, uint32_t page,
@@ -292,37 +321,27 @@ static uint32_t nand_read_data(uint8_t *buf, uint32_t page,
 {
     uint32_t i;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.read1_cmd;
+    nand_bus_write(CMD_AREA, fsmc_conf.read1_cmd);
 
     switch (fsmc_conf.col_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(page_offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page_offset));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(page_offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page_offset));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_3rd_CYCLE(page_offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page_offset));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_3rd_CYCLE(page_offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_4th_CYCLE(page_offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page_offset));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(page_offset));
     default:
         break;
     }
@@ -330,32 +349,32 @@ static uint32_t nand_read_data(uint8_t *buf, uint32_t page,
     switch (fsmc_conf.row_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_4th_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(page));
         break;
     default:
         break;
     }
 
     if (fsmc_conf.read2_cmd != UNDEFINED_CMD)
-        *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.read2_cmd;
+        nand_bus_write(CMD_AREA, fsmc_conf.read2_cmd);
 
     for (i = 0; i < data_size; i++)
-        buf[i] = *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA);
+        buf[i] = nand_bus_read(DATA_AREA);
 
     return nand_get_status();
 }
@@ -373,37 +392,27 @@ static uint32_t nand_read_spare_data(uint8_t *buf, uint32_t page,
     if (fsmc_conf.read_spare_cmd == UNDEFINED_CMD)
         return FLASH_STATUS_INVALID_CMD;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.read_spare_cmd;
+    nand_bus_write(CMD_AREA, fsmc_conf.read_spare_cmd);
 
     switch (fsmc_conf.col_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(offset));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(offset));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_3rd_CYCLE(offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(offset));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_1st_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_2nd_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_3rd_CYCLE(offset);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) =
-            ADDR_4th_CYCLE(offset);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(offset));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(offset));
     default:
         break;
     }
@@ -411,63 +420,63 @@ static uint32_t nand_read_spare_data(uint8_t *buf, uint32_t page,
     switch (fsmc_conf.row_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_4th_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(page));
         break;
     default:
         break;
     }
 
     for (i = 0; i < data_size; i++)
-        buf[i] = *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA);
+        buf[i] = nand_bus_read(DATA_AREA);
 
     return nand_get_status();
 }
 
 static uint32_t nand_erase_block(uint32_t page)
 {
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.erase1_cmd;
+    nand_bus_write(CMD_AREA, fsmc_conf.erase1_cmd);
 
     switch (fsmc_conf.row_cycles)
     {
     case 1:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
         break;
     case 2:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
         break;
     case 3:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
         break;
     case 4:
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_1st_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_2nd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_3rd_CYCLE(page);
-        *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = ADDR_4th_CYCLE(page);
+        nand_bus_write(ADDR_AREA, ADDR_1st_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_2nd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_3rd_CYCLE(page));
+        nand_bus_write(ADDR_AREA, ADDR_4th_CYCLE(page));
         break;
     default:
         break;
     }
 
     if (fsmc_conf.erase2_cmd != UNDEFINED_CMD)
-        *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.erase2_cmd;
+        nand_bus_write(CMD_AREA, fsmc_conf.erase2_cmd);
 
     return nand_get_status();
 }
@@ -487,12 +496,12 @@ static uint32_t nand_enable_hw_ecc(bool enable)
     enable_ecc = enable ? fsmc_conf.enable_ecc_value :
         fsmc_conf.disable_ecc_value;
 
-    *(__IO uint8_t *)(Bank_NAND_ADDR | CMD_AREA) = fsmc_conf.set_features_cmd;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | ADDR_AREA) = fsmc_conf.enable_ecc_addr;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA) = enable_ecc;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA) = 0;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA) = 0;
-    *(__IO uint8_t *)(Bank_NAND_ADDR | DATA_AREA) = 0;
+    nand_bus_write(CMD_AREA, fsmc_conf.set_features_cmd);
+    nand_bus_write(ADDR_AREA, fsmc_conf.enable_ecc_addr);
+    nand_bus_write(DATA_AREA, enable_ecc);
+    nand_bus_write(DATA_AREA, 0);
+    nand_bus_write(DATA_AREA, 0);
+    nand_bus_write(DATA_AREA, 0);
 
     return 0;
 }

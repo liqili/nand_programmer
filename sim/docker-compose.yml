@@ -1,0 +1,35 @@
+# Copyright (C) 2020 NANDO authors
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3.
+#
+# Renode simulation of the NANDO firmware.
+#
+# Run headless from this directory:
+#
+#   docker-compose up
+#
+# Everything Renode prints lands in ./out/renode.log inside the repository,
+# so the results are readable without attaching to the container.
+
+services:
+  renode:
+    image: antmicro/renode:1.16.1
+    container_name: nando-renode
+
+    # The repository root is mounted read-write purely so the simulation can
+    # write its logs back into ./out
+    volumes:
+      - ..:/repo
+
+    working_dir: /repo/sim
+
+    # No X server is needed, Renode runs headless and logs to a file
+    command:
+      - sh
+      - -lc
+      - |
+        mkdir -p out
+        renode --disable-gui --console --plain \
+          /repo/sim/nando.resc > out/renode.log 2>&1
+        echo "renode exit status: $$?" >> out/renode.log
+        tail -n 40 out/renode.log

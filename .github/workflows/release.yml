@@ -45,7 +45,6 @@ jobs:
           sudo /opt/local/bin/port install boost
           brew install create-dmg
           echo 'CMAKE_PREFIX_PATH="${{env.Qt5_Dir}}/lib/cmake/"' >> $GITHUB_ENV
-          # echo "CMAKE_PREFIX_PATH=/opt/local/libexec/qt5/lib/cmake/Qt5" >> $GITHUB_ENV
           echo "BOOST_ROOT=/opt/local" >> $GITHUB_ENV
           echo "BOOST_INCLUDEDIR=/opt/local/include" >> $GITHUB_ENV
           echo "BOOST_LIBRARYDIR=/opt/local/lib" >> $GITHUB_ENV
@@ -89,9 +88,7 @@ jobs:
             -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH \
             -DBOOST_ROOT=$BOOST_ROOT \
             -DBOOST_INCLUDEDIR=$BOOST_INCLUDEDIR \
-            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR \
-            -DQt5_DIR=${{env.Qt5_Dir}}/lib/cmake/Qt5/ \
-            -DMACDEPLOYQT_PATH=${{env.Qt5_Dir}}/bin/macdeployqt
+            -DBOOST_LIBRARYDIR=$BOOST_LIBRARYDIR
 
       # Step 5: Build the project using CMake
       - name: Build project with CMake
